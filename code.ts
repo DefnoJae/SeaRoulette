@@ -305,7 +305,6 @@ function init() {
                 lastPick = titleOf(pick);
                 cooldownUntil = Date.now() + 5000;
                 tray.update();
-                tray.close();
                 stage = "Opening anime page";
                 ctx.screen.navigateTo("/entry", { id: String(pick.id) });
                 ctx.toast.success("SeaRoulette picked " + lastPick);
@@ -411,7 +410,7 @@ function init() {
             const seconds = Math.max(0, Math.ceil((cooldownUntil - Date.now()) / 1000));
             const items: any[] = [
                 tray.text({
-                    text: "SeaRoulette 0.1.4",
+                    text: "SeaRoulette 0.1.5",
                     style: { fontSize: "20px", fontWeight: "700" }
                 }),
                 tray.text({

@@ -35,6 +35,10 @@ Dub catalog data is provided by MAL-Dubs under its [AGPL-3.0 license](https://gi
 
 The pool, collection and taste metadata remain cached for the current plugin session. Taste tags are fetched in batches of up to 50 titles; recommendation connections are fetched only for the selected seeds (the top 25 recommendations each). Rerolls reuse these records. **Refresh roulette pool** fetches the collection again and restarts the selection cycle while preserving valid dub and taste records. Refresh is limited to once per minute. Changing normal filters also restarts the cycle. Settings persist across plugin restarts; the no-repeat cycle is session-only.
 
+## 0.1.5 — Keep the tray open
+
+Generate opens the selected anime page while keeping SeaRoulette's tray open. The cooldown updates in place, letting you generate again after five seconds. Click outside the tray to dismiss it using Seanime's native behavior.
+
 ## 0.1.4 — Catalog-based dubs and no automatic metadata retries
 
 Removed per-title AniList cast queries completely. Even a large library now needs only one external catalog download for dub filtering, then local MAL-ID lookups. Taste scoring happens after this fully filtered pool is known.
