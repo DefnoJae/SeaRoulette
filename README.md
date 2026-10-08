@@ -31,7 +31,15 @@ Selected lists combine with OR; list, rating, dub and genre categories combine w
 
 English Dub Only checks actual **English voice-actor credits on that anime's AniList character edges**, paging through characters until evidence is found or all pages are exhausted. It never infers a dub from English titles or country metadata. AniList's cast records can be incomplete: a dubbed title without recorded English credits is excluded. This verifies recorded dub production, not availability on a particular streaming service. Positive and negative checks persist for seven days; failed requests are never cached as negatives.
 
-The eligible pool, collection and taste metadata remain cached for the current plugin session. Taste tags are fetched in batches of up to 50 titles; recommendation connections are fetched only for the selected seeds (the top 25 recommendations each). Rerolls reuse these records. First-time dub checks may take longer for large libraries. **Refresh roulette pool** fetches the collection again, clears metadata/dub caches and restarts the selection cycle. Changing normal filters also restarts the cycle. Settings persist across plugin restarts; the no-repeat cycle is session-only.
+The pool, collection and taste metadata remain cached for the current plugin session. Taste tags are fetched in batches of up to 50 titles; recommendation connections are fetched only for the selected seeds (the top 25 recommendations each). Rerolls reuse these records. **Refresh roulette pool** fetches the collection again and restarts the selection cycle while preserving valid dub and taste records. Refresh is limited to once per minute. Changing normal filters also restarts the cycle. Settings persist across plugin restarts; the no-repeat cycle is session-only.
+
+## 0.1.3 — Request pacing and on-demand dub verification
+
+Generate no longer scans every title's cast before making the first pick. It draws candidates from the list/rating/genre pool, verifies a candidate's English cast only when needed, rejects confirmed non-dubs, and stops as soon as a valid pick is found. Cached positives and negatives are reused, including records saved by earlier versions. Weighted rejection produces the same taste-weighted distribution among eligible dubbed titles; an unverified title never becomes a final pick.
+
+Dub pages, taste metadata and search share one serialized queue with at least **2.5 seconds between requests** (at most about 24 metadata requests per minute). Generate remains busy while verification runs, repeated clicks cannot launch another scan, and changing filters cancels pending work before it can open an outdated pick. First-time searches or verification can take longer when multiple requests are needed. Seanime's shared AniList backoff still applies if other activity consumes the remaining quota.
+
+Regression coverage includes a 500-title pool that needs only one dub request when its first candidate qualifies, paced concurrent search/taste/dub requests, filter-change cancellation, and cache-preserving refreshes. The asynchronous Generate/pagination path was also checked in Seanime 3.10.3's pinned Goja runtime with native Go fixtures and timer callbacks.
 
 ## 0.1.2 — Public AniList queries
 

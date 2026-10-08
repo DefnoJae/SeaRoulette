@@ -29,6 +29,10 @@ function init() {
         let tasteResults: any[] = [];
         let collectionCache: any = null;
         let generating = false;
+        let revision = 0;
+        let lastRequestAt = -Infinity;
+        let requestQueue: Promise<void> = Promise.resolve();
+        let lastRefreshAt = -Infinity;
         const metadata: Record<string, any> = {};
         const dubCache: Record<string, {
             value: boolean;
@@ -58,13 +62,23 @@ function init() {
             return Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : fallback;
         }
         // customQuery returns the unwrapped GraphQL data, unlike an HTTP response.
-        function query(query: string, variables: Record<string, any>): any {
+        function query(query: string, variables: Record<string, any>, expectedRevision = revision): Promise<any> {
             // Cast, search and taste metadata are public. getToken() requires
             // anilist-token permission and throws before the request without it.
-            const result = $anilist.customQuery({ query, variables }, "");
-            if (!result)
-                throw new Error("AniList returned no data");
-            return result;
+            const request = requestQueue.then(async () => {
+                const delay = Math.max(0, lastRequestAt + 2500 - Date.now());
+                if (delay)
+                    await new Promise<void>(resolve => ctx.setTimeout(resolve, delay));
+                if (expectedRevision !== revision)
+                    throw new Error("Filters changed");
+                lastRequestAt = Date.now();
+                const result = $anilist.customQuery({ query, variables }, "");
+                if (!result)
+                    throw new Error("AniList returned no data");
+                return result;
+            });
+            requestQueue = request.then(() => undefined, () => undefined);
+            return request;
         }
         function titleOf(m: any) { return String(m?.title?.userPreferred || m?.title?.english || m?.title?.romaji || "Untitled"); }
         function reportError(action: string, error: any) {
@@ -81,6 +95,7 @@ function init() {
             invalidate();
         }
         function invalidate(resetPool = true) {
+            revision++;
             if (resetPool) {
                 cachedPool = [];
                 cacheKey = "";
@@ -124,14 +139,14 @@ function init() {
             }
             return true;
         }
-        function hasEnglishDub(id: number): boolean {
+        async function hasEnglishDub(id: number, expectedRevision: number): Promise<boolean> {
             const cached = dubCache[String(id)];
             if (cached && Date.now() - cached.checkedAt < 7 * 24 * 60 * 60 * 1000)
                 return cached.value;
             let page = 1;
             let value = false;
             while (true) {
-                const data = query(`query($id:Int!,$page:Int!){Media(id:$id,type:ANIME){characters(page:$page,perPage:25){pageInfo{hasNextPage} edges{voiceActors(language:ENGLISH){id}}}}}`, { id, page });
+                const data = await query(`query($id:Int!,$page:Int!){Media(id:$id,type:ANIME){characters(page:$page,perPage:25){pageInfo{hasNextPage} edges{voiceActors(language:ENGLISH){id}}}}}`, { id, page }, expectedRevision);
                 const characters = data?.Media?.characters;
                 if (!Array.isArray(characters?.edges) || typeof characters?.pageInfo?.hasNextPage !== "boolean")
                     throw new Error("Could not verify English cast");
@@ -144,16 +159,19 @@ function init() {
             $storage.set("dubCache", dubCache);
             return value;
         }
-        function buildPool(onStage: (stage:string) => void): any[] {
+        function buildPool(): any[] {
             const key = JSON.stringify([settings.lists, settings.dubOnly, settings.minRating, settings.maxRating, settings.genres, settings.genreMode]);
             if (key === cacheKey)
                 return cachedPool;
             let pool = flattenCollection().filter(passesBasic);
-            if (settings.dubOnly) {
-                onStage("English dub verification");
-                ctx.toast.info("SeaRoulette: checking English dub availability…");
-                pool = pool.filter((m: any) => hasEnglishDub(Number(m.id)));
-            }
+            // Unknown dubs are checked only when drawn, rather than scanning
+            // the entire library. Rejecting non-dubs preserves the same weighted
+            // distribution among verified eligible candidates.
+            if (settings.dubOnly)
+                pool = pool.filter(m => {
+                    const cached = dubCache[String(m.id)];
+                    return !cached || Date.now() - cached.checkedAt >= 7 * 24 * 60 * 60 * 1000 || cached.value;
+                });
             cachedPool = pool;
             cacheKey = key;
             used = [];
@@ -181,13 +199,13 @@ function init() {
             }
             return Math.max(1, score);
         }
-        function prepareTaste(pool: any[]) {
+        async function prepareTaste(pool: any[], expectedRevision: number) {
             if (!settings.tasteEnabled || !settings.tasteSeeds.length)
                 return;
             // Fetch recommendation connections only for the 1–5 taste seeds.
             const seeds = settings.tasteSeeds.map(s => s.id).filter(id => !metadata[String(id)]?.recommendations);
             if (seeds.length) {
-                const data = query(`query($ids:[Int]){Page(page:1,perPage:5){media(id_in:$ids,type:ANIME){id genres tags{id rank} recommendations(perPage:25,sort:RATING_DESC){edges{node{mediaRecommendation{id}}}}}}}`, { ids: seeds });
+                const data = await query(`query($ids:[Int]){Page(page:1,perPage:5){media(id_in:$ids,type:ANIME){id genres tags{id rank} recommendations(perPage:25,sort:RATING_DESC){edges{node{mediaRecommendation{id}}}}}}}`, { ids: seeds }, expectedRevision);
                 if (!Array.isArray(data?.Page?.media) || data.Page.media.length !== seeds.length)
                     throw new Error("Could not load taste seeds");
                 for (const media of data.Page.media)
@@ -197,7 +215,7 @@ function init() {
                 .filter((id, i, a) => a.indexOf(id) === i && !metadata[String(id)]);
             for (let i = 0; i < ids.length; i += 50) {
                 const batch = ids.slice(i, i + 50);
-                const data = query(`query($ids:[Int]){Page(page:1,perPage:50){media(id_in:$ids,type:ANIME){id genres tags{id rank}}}}`, { ids: batch });
+                const data = await query(`query($ids:[Int]){Page(page:1,perPage:50){media(id_in:$ids,type:ANIME){id genres tags{id rank}}}}`, { ids: batch }, expectedRevision);
                 if (!Array.isArray(data?.Page?.media) || data.Page.media.length !== batch.length)
                     throw new Error("Could not load taste metadata");
                 for (const media of data.Page.media)
@@ -223,7 +241,7 @@ function init() {
             }
             return weighted[weighted.length - 1]?.m;
         }
-        function generate() {
+        async function generate() {
             if (generating)
                 return;
             const left = cooldownUntil - Date.now();
@@ -246,16 +264,33 @@ function init() {
             generating = true;
             tray.update();
             let stage = "AniList collection loading";
+            const generationRevision = revision;
             try {
-                const pool = buildPool(value => stage = value);
+                const pool = buildPool();
                 if (!pool.length) {
                     ctx.toast.warning("SeaRoulette: no anime matched these filters.");
                     return;
                 }
                 stage = "Taste metadata loading";
-                prepareTaste(pool);
+                if (settings.tasteEnabled)
+                    await prepareTaste(pool, generationRevision);
+                if (generationRevision !== revision)
+                    return;
                 stage = "Anime selection";
-                const pick = choose(pool);
+                let pick = choose(pool);
+                while (pick && settings.dubOnly) {
+                    stage = "English dub verification";
+                    if (await hasEnglishDub(Number(pick.id), generationRevision))
+                        break;
+                    if (generationRevision !== revision)
+                        return;
+                    pool.splice(pool.indexOf(pick), 1);
+                    pick = pool.length ? choose(pool) : undefined;
+                }
+                if (generationRevision !== revision)
+                    return;
+                if (!pick && !pool.length)
+                    ctx.toast.warning("SeaRoulette: no anime matched these filters.");
                 if (!pick)
                     return;
                 used.push(Number(pick.id));
@@ -274,43 +309,59 @@ function init() {
                 ctx.setTimeout(tick, 1000);
             }
             catch (error) {
-                reportError(stage, error);
+                if (generationRevision === revision)
+                    reportError(stage, error);
             }
             finally {
                 generating = false;
                 tray.update();
             }
         }
-        function searchTaste() {
+        let searching = false;
+        async function searchTaste() {
+            if (searching)
+                return;
             const q = tasteQuery.trim();
             if (!q) {
                 tasteResults = [];
                 tray.update();
                 return;
             }
+            searching = true;
+            tray.update();
+            const searchRevision = revision;
             try {
                 // Use GraphQL explicitly: v3.10.3 listAnime's runtime has an extra tags
                 // argument missing from its declaration file.
-                const r = query(`query($search:String!){Page(page:1,perPage:8){media(search:$search,type:ANIME){id title{english romaji userPreferred}}}}`, { search: q });
+                const r = await query(`query($search:String!){Page(page:1,perPage:8){media(search:$search,type:ANIME){id title{english romaji userPreferred}}}}`, { search: q }, searchRevision);
+                if (tasteQuery.trim() !== q || searchRevision !== revision)
+                    return;
                 if (!Array.isArray(r?.Page?.media))
                     throw new Error("Invalid search response");
                 tasteResults = r.Page.media;
             }
             catch (e) {
                 tasteResults = [];
-                reportError("Taste search", e);
+                if (searchRevision === revision)
+                    reportError("Taste search", e);
             }
-            tray.update();
+            finally {
+                searching = false;
+                tray.update();
+            }
         }
         ctx.registerEventHandler("generate", generate);
         ctx.registerEventHandler("refresh-pool", () => {
+            if (generating || searching)
+                return;
+            if (Date.now() - lastRefreshAt < 60000) {
+                ctx.toast.info("SeaRoulette: the collection was refreshed recently. Try Generate.");
+                return;
+            }
+            lastRefreshAt = Date.now();
             try {
                 collectionCache = $anilist.getAnimeCollection(true);
-                for (const key of Object.keys(metadata))
-                    delete metadata[key];
-                for (const key of Object.keys(dubCache))
-                    delete dubCache[key];
-                $storage.set("dubCache", dubCache);
+                // Keep expensive metadata and valid dub evidence on refresh.
                 invalidate();
                 ctx.toast.success("SeaRoulette pool refreshed.");
             }
@@ -360,7 +411,7 @@ function init() {
                     style: { opacity: "0.72" }
                 }),
                 tray.button({
-                    label: seconds ? "Spin again in " + seconds + "s" : "🎲 Generate",
+                    label: generating ? "Finding an anime…" : seconds ? "Spin again in " + seconds + "s" : "🎲 Generate",
                     onClick: "generate", intent: "primary", disabled: seconds > 0 || generating, loading: generating, size: "lg"
                 }),
                 ...(lastPick ? [tray.text({
@@ -437,7 +488,7 @@ function init() {
                             }),
                             tray.button({
                                 label: "Search",
-                                onClick: "taste-search"
+                                onClick: "taste-search", disabled: searching, loading: searching
                             })
                         ],
                         gap: 2
@@ -451,7 +502,7 @@ function init() {
                     })] : []),
                 tray.button({
                     label: "Refresh roulette pool",
-                    onClick: "refresh-pool", size: "xs"
+                    onClick: "refresh-pool", size: "xs", disabled: generating || searching
                 }),
                 tray.text({
                     text: "Each spin opens the anime immediately. Picks do not repeat until the current eligible pool is exhausted.",
