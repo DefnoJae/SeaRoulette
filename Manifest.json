@@ -1,1 +1,21 @@
-
+{
+  "id": "searoulette",
+  "name": "SeaRoulette",
+  "version": "0.1.0",
+  "manifestURI": "https://raw.githubusercontent.com/DefnoJae/SeaRoulette/main/Manifest.json",
+  "language": "typescript",
+  "type": "plugin",
+  "description": "Randomly pick an anime from your AniList library using list, dub, rating, genre and taste filters.",
+  "author": "DefnoJae",
+  "website": "https://github.com/DefnoJae/SeaRoulette",
+  "lang": "en",
+  "payload": "",
+  "payloadURI": "https://raw.githubusercontent.com/DefnoJae/SeaRoulette/main/code.ts",
+  "plugin": {
+    "version": "1",
+    "permissions": {
+      "scopes": ["anilist", "storage", "database"],
+      "allow": {}
+    }
+  }
+}
