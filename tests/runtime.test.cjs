@@ -280,8 +280,20 @@ test('empty discovery makes one request and waits for manual refresh; stale work
  await app.handlers['refresh-pool']();await app.handlers.generate();assert.equal(app.requests[1].variables.page,1);
  let release;
  const stale=boot({settings:{lists:['OUTSIDE']},fetch:()=>new Promise(r=>release=r)});
- const pending=stale.rawHandlers.generate();await Promise.resolve();
+ const pending=stale.rawHandlers.generate();for(let i=0;i<20 && !release;i++)await Promise.resolve();
  await stale.handlers['list-OUTSIDE']({value:false});
  release({ok:true,status:200,json:()=>({data:{Page:{pageInfo:{hasNextPage:false},media:[media(20)]}}})});
  await stale.settle(pending);assert.equal(stale.navigation.length,0);
+});
+test('delayed discovery and dub fetches complete, and rejection releases the Generate guard',async()=>{
+ const pending=[];
+ const app=boot({settings:{lists:['OUTSIDE'],dubOnly:true},fetch:(url)=>new Promise((resolve,reject)=>pending.push({url,resolve,reject}))});
+ async function waitForRequest(){for(let i=0;i<30 && !pending.length;i++)await Promise.resolve();assert.ok(pending.length);return pending.shift();}
+ let spin=app.rawHandlers.generate();let req=await waitForRequest();
+ req.reject(Error('connection closed'));await app.settle(spin);assert.equal(generateButton(app).props.disabled,false);
+ app.advance(2500);spin=app.rawHandlers.generate();req=await waitForRequest();
+ req.resolve({ok:true,status:200,json:()=>({data:{Page:{pageInfo:{hasNextPage:false},media:[media(20)]}}})});
+ req=await waitForRequest();assert.ok(req.url.includes('dubInfo.json'));
+ req.resolve({ok:true,status:200,json:()=>({dubbed:[20],incomplete:[]})});
+ await app.settle(spin);assert.equal(app.navigation[0].params.id,'20');
 });

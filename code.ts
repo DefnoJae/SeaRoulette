@@ -35,11 +35,11 @@ function init() {
                 value.dubbed.every((id: any) => Number.isInteger(id) && id > 0) &&
                 Array.isArray(value.incomplete) && value.incomplete.every((id: any) => Number.isInteger(id) && id > 0);
         }
-        async function loadDubCatalog() {
+        function loadDubCatalog(): Promise<void> {
             if (validCatalog(dubCatalog) && Number.isFinite(dubCatalog.fetchedAt) && Date.now() - dubCatalog.fetchedAt < 24 * 60 * 60 * 1000)
-                return;
-            try {
-                const response = await ctx.fetch(DUB_URL, { timeout: 15, noCloudflareBypass: true });
+                return Promise.resolve();
+            // Promise callbacks avoid Goja's native async continuation path.
+            return Promise.resolve().then(() => ctx.fetch(DUB_URL, { timeout: 15, noCloudflareBypass: true })).then(response => {
                 if (!response.ok)
                     throw new Error("Dub catalog HTTP " + response.status);
                 const data = response.json();
@@ -47,12 +47,11 @@ function init() {
                     throw new Error("Invalid dub catalog");
                 dubCatalog = { dubbed: data.dubbed, incomplete: data.incomplete, fetchedAt: Date.now() };
                 $storage.set("dubCatalog", dubCatalog);
-            }
-            catch (error) {
+            }).catch(error => {
                 if (!validCatalog(dubCatalog) || !Number.isFinite(dubCatalog.fetchedAt) || Date.now() - dubCatalog.fetchedAt >= 7 * 24 * 60 * 60 * 1000)
                     throw error;
                 ctx.toast.info("SeaRoulette: using the saved dub catalog while its source is unavailable.");
-            }
+            });
         }
         const tray = ctx.newTray({
             withContent: true,
@@ -138,33 +137,43 @@ function init() {
             const malId = Number(media.idMal);
             return malId > 0 && (dubCatalog.dubbed.indexOf(malId) >= 0 || dubCatalog.incomplete.indexOf(malId) >= 0);
         }
-        async function loadDiscovery(expectedRevision: number) {
-            if (discovery !== null) return;
+        function loadDiscovery(expectedRevision: number): Promise<void> {
+            if (discovery !== null)
+                return Promise.resolve();
             if (Date.now() < blockedUntil)
-                throw new Error("AniList rate limited. Wait " + Math.ceil((blockedUntil - Date.now()) / 1000) + "s, then click Generate. No automatic retry.");
+                return Promise.reject(new Error("AniList rate limited. Wait " + Math.ceil((blockedUntil - Date.now()) / 1000) + "s, then click Generate. No automatic retry."));
             const delay = Math.max(0, lastDiscoveryAt + 2500 - Date.now());
-            if (delay) await new Promise<void>(resolve => ctx.setTimeout(resolve, delay));
-            if (expectedRevision !== revision) return;
-            lastDiscoveryAt = Date.now();
-            const response = await ctx.fetch("https://graphql.anilist.co", {
-                method: "POST", headers: {"Content-Type":"application/json"}, timeout:15, noCloudflareBypass:true,
-                body: JSON.stringify({query: "query($page:Int!){Page(page:$page,perPage:50){pageInfo{hasNextPage} media(type:ANIME,sort:POPULARITY_DESC){id idMal genres meanScore title{userPreferred english romaji}}}}", variables:{page:discoveryPage}}),
+            const ready = delay ? new Promise<void>(resolve => ctx.setTimeout(resolve, delay)) : Promise.resolve();
+            return ready.then(() => {
+                if (expectedRevision !== revision)
+                    return;
+                lastDiscoveryAt = Date.now();
+                return ctx.fetch("https://graphql.anilist.co", {
+                    method: "POST", headers: { "Content-Type": "application/json" }, timeout: 15, noCloudflareBypass: true,
+                    body: JSON.stringify({ query: "query($page:Int!){Page(page:$page,perPage:50){pageInfo{hasNextPage} media(type:ANIME,sort:POPULARITY_DESC){id idMal genres meanScore title{userPreferred english romaji}}}}", variables: { page: discoveryPage } }),
+                });
+            }).then(response => {
+                if (!response || expectedRevision !== revision)
+                    return;
+                if (response.status === 429) {
+                    const key = Object.keys(response.headers || {}).find(k => k.toLowerCase() === "retry-after");
+                    const seconds = Number(key ? response.headers[key] : 60);
+                    blockedUntil = Date.now() + (Number.isFinite(seconds) ? Math.max(1, seconds) : 60) * 1000;
+                    throw new Error("AniList rate limited. No automatic retry; wait before clicking Generate again.");
+                }
+                if (!response.ok)
+                    throw new Error("AniList HTTP " + response.status);
+                const result = response.json();
+                if (result?.errors?.length)
+                    throw new Error(String(result.errors[0].message));
+                const page = result?.data?.Page;
+                if (!Array.isArray(page?.media) || typeof page?.pageInfo?.hasNextPage !== "boolean")
+                    throw new Error("Invalid discovery response");
+                if (expectedRevision !== revision)
+                    return;
+                discovery = page.media;
+                discoveryHasNext = page.pageInfo.hasNextPage;
             });
-            if (response.status === 429) {
-                const key = Object.keys(response.headers || {}).find(k => k.toLowerCase() === "retry-after");
-                const seconds = Number(key ? response.headers[key] : 60);
-                blockedUntil = Date.now() + (Number.isFinite(seconds) ? Math.max(1,seconds) : 60) * 1000;
-                throw new Error("AniList rate limited. No automatic retry; wait before clicking Generate again.");
-            }
-            if (!response.ok) throw new Error("AniList HTTP " + response.status);
-            const result = response.json();
-            if (result?.errors?.length) throw new Error(String(result.errors[0].message));
-            const page = result?.data?.Page;
-            if (!Array.isArray(page?.media) || typeof page?.pageInfo?.hasNextPage !== "boolean")
-                throw new Error("Invalid discovery response");
-            if (expectedRevision !== revision) return;
-            discovery = page.media;
-            discoveryHasNext = page.pageInfo.hasNextPage;
         }
         function buildPool(): any[] {
             const key = JSON.stringify([settings.lists, settings.dubOnly, settings.minRating, settings.maxRating, settings.genres, settings.genreMode]);
@@ -175,10 +184,12 @@ function init() {
                 const libraryIds: Record<string, boolean> = {};
                 for (const list of collectionCache.MediaListCollection.lists)
                     for (const entry of (list?.entries || []))
-                        if (entry?.media?.id) libraryIds[String(entry.media.id)] = true;
+                        if (entry?.media?.id)
+                            libraryIds[String(entry.media.id)] = true;
                 const seen: Record<string, boolean> = {};
                 for (const m of discovery || []) {
-                    if (!m?.id || libraryIds[String(m.id)] || seen[String(m.id)]) continue;
+                    if (!m?.id || libraryIds[String(m.id)] || seen[String(m.id)])
+                        continue;
                     seen[String(m.id)] = true;
                     pool.push(m);
                 }
@@ -197,7 +208,7 @@ function init() {
             }
             return available[Math.floor(Math.random() * available.length)];
         }
-        async function generate() {
+        function generate() {
             if (generating)
                 return;
             const left = cooldownUntil - Date.now();
@@ -217,28 +228,29 @@ function init() {
             tray.update();
             let stage = "AniList collection loading";
             const generationRevision = revision;
-            try {
-                // Always load the full collection so outside picks exclude every status.
+            return Promise.resolve().then(() => {
                 flattenCollection();
                 if (settings.lists.indexOf("OUTSIDE") >= 0) {
                     stage = "Outside-library discovery";
-                    await loadDiscovery(generationRevision);
-                    if (generationRevision !== revision) return;
+                    return loadDiscovery(generationRevision);
                 }
-                let pool = buildPool();
+            }).then(() => {
+                if (generationRevision !== revision)
+                    return;
                 if (settings.dubOnly) {
                     stage = "English dub catalog loading";
-                    await loadDubCatalog();
-                    if (generationRevision !== revision)
-                        return;
-                    pool = pool.filter(hasEnglishDub);
+                    return loadDubCatalog();
                 }
+            }).then(() => {
+                if (generationRevision !== revision)
+                    return;
+                let pool = buildPool();
+                if (settings.dubOnly)
+                    pool = pool.filter(hasEnglishDub);
                 if (!pool.length) {
                     ctx.toast.warning(settings.lists.indexOf("OUTSIDE") >= 0 ? "SeaRoulette: no matches in this batch. Refresh roulette pool to try the next 50 titles." : "SeaRoulette: no anime matched these filters.");
                     return;
                 }
-                if (generationRevision !== revision)
-                    return;
                 stage = "Anime selection";
                 const pick = choose(pool);
                 if (!pick)
@@ -256,15 +268,13 @@ function init() {
                         ctx.setTimeout(tick, Math.min(1000, cooldownUntil - Date.now()));
                 }
                 ctx.setTimeout(tick, 1000);
-            }
-            catch (error) {
+            }).catch(error => {
                 if (generationRevision === revision)
                     reportError(stage, error);
-            }
-            finally {
+            }).finally(() => {
                 generating = false;
                 tray.update();
-            }
+            });
         }
         ctx.registerEventHandler("generate", generate);
         ctx.registerEventHandler("refresh-pool", () => {
@@ -296,14 +306,14 @@ function init() {
             ctx.registerEventHandler("list-" + item[0], (e: any) => setArrayValue(settings.lists, item[0], typeof e?.value === "boolean" ? e.value : settings.lists.indexOf(item[0]) < 0));
         for (const g of GENRES)
             ctx.registerEventHandler("genre-" + g, (e: any) => setArrayValue(settings.genres, g, typeof e?.value === "boolean" ? e.value : settings.genres.indexOf(g) < 0));
-        ctx.registerEventHandler("genre-mode-any", () => {settings.genreMode="ANY";invalidate();});
-        ctx.registerEventHandler("genre-mode-all", () => {settings.genreMode="ALL";invalidate();});
+        ctx.registerEventHandler("genre-mode-any", () => { settings.genreMode = "ANY"; invalidate(); });
+        ctx.registerEventHandler("genre-mode-all", () => { settings.genreMode = "ALL"; invalidate(); });
         ctx.registerEventHandler("dub-only", (e: any) => { settings.dubOnly = !!(e?.value ?? e); invalidate(); });
         tray.render(() => {
             const seconds = Math.max(0, Math.ceil((cooldownUntil - Date.now()) / 1000));
             const items: any[] = [
                 tray.text({
-                    text: "SeaRoulette 0.1.9",
+                    text: "SeaRoulette 0.1.10",
                     style: { fontSize: "20px", fontWeight: "700" }
                 }),
                 tray.button({
@@ -314,22 +324,22 @@ function init() {
                         text: "Last pick: " + lastPick,
                         style: { opacity: "0.7", fontSize: "12px" }
                     })] : []),
-                tray.text({text:"Lists",style:{fontWeight:"600"}}),
+                tray.text({ text: "Lists", style: { fontWeight: "600" } }),
                 tray.div({
-                    style:{display:"grid",gridTemplateColumns:"repeat(3, minmax(0, 1fr))",gap:"8px"},
-                    items: LISTS.map(x=>tray.checkbox({label:x[1],value:settings.lists.indexOf(x[0])>=0,onChange:"list-"+x[0],size:"sm"})),
+                    style: { display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "8px" },
+                    items: LISTS.map(x => tray.checkbox({ label: x[1], value: settings.lists.indexOf(x[0]) >= 0, onChange: "list-" + x[0], size: "sm" })),
                 }),
-                ...(settings.lists.indexOf("OUTSIDE") >= 0 ? [tray.text({text:"Outside library: 50-title batches by popularity. Refresh loads the next batch.",style:{fontSize:"12px",opacity:"0.7"}})] : []),
-                tray.flex({gap:2,
-                    items:[
-                        tray.text({text:"Genres",style:{fontWeight:"600"}}),
-                        tray.button({label:"ANY",onClick:"genre-mode-any",size:"xs",intent:settings.genreMode==="ANY"?"primary-subtle":"gray"}),
-                        tray.button({label:"ALL",onClick:"genre-mode-all",size:"xs",intent:settings.genreMode==="ALL"?"primary-subtle":"gray"}),
+                ...(settings.lists.indexOf("OUTSIDE") >= 0 ? [tray.text({ text: "Outside library: 50-title batches by popularity. Refresh loads the next batch.", style: { fontSize: "12px", opacity: "0.7" } })] : []),
+                tray.flex({ gap: 2,
+                    items: [
+                        tray.text({ text: "Genres", style: { fontWeight: "600" } }),
+                        tray.button({ label: "ANY", onClick: "genre-mode-any", size: "xs", intent: settings.genreMode === "ANY" ? "primary-subtle" : "gray" }),
+                        tray.button({ label: "ALL", onClick: "genre-mode-all", size: "xs", intent: settings.genreMode === "ALL" ? "primary-subtle" : "gray" }),
                     ],
                 }),
                 tray.div({
-                    style:{display:"grid",gridTemplateColumns:"repeat(3, minmax(0, 1fr))",gap:"8px"},
-                    items:GENRES.map(g=>tray.checkbox({label:g,value:settings.genres.indexOf(g)>=0,onChange:"genre-"+g,size:"sm"})),
+                    style: { display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "8px" },
+                    items: GENRES.map(g => tray.checkbox({ label: g, value: settings.genres.indexOf(g) >= 0, onChange: "genre-" + g, size: "sm" })),
                 }),
                 tray.switch({
                     label: "English dub only",
