@@ -1,7 +1,7 @@
 {
   "id": "searoulette",
   "name": "SeaRoulette",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "manifestURI": "https://raw.githubusercontent.com/DefnoJae/SeaRoulette/main/Manifest.json",
   "language": "typescript",
   "type": "plugin",
@@ -14,7 +14,7 @@
   "plugin": {
     "version": "1",
     "permissions": {
-      "scopes": ["anilist", "storage", "database"],
+      "scopes": ["anilist", "storage"],
       "allow": {}
     }
   }

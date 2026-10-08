@@ -49,10 +49,12 @@ function boot(options={}) {
     screen:{navigateTo:(path,params)=>navigation.push({path,params})},
     toast:Object.fromEntries(['info','warning','error','success'].map(level=>[level,text=>messages.push({level,text})])),
     setTimeout:(fn,delay)=>{timers.push({fn,at:now+delay});return ()=>{};}};
-  const sandbox={Date:class extends Date {static now(){return now;}},Math:Object.create(Math),
+  const sandbox={Date:class extends Date {static now(){return now;}},Math:Object.create(Math),console:{error:()=>{}},
     $ui:{register:fn=>fn(ctx)},$storage:{get:key=>structuredClone(storage[key]),set:(key,value)=>storage[key]=structuredClone(value)},
-    $database:{anilist:{getToken:()=>''}},
-    $anilist:{getAnimeCollection:bypass=>{collections.push(bypass);return collection;},
+    // Match the installed manifest: reading a token must throw. Public
+    // metadata queries must never call this API.
+    $database:{anilist:{getToken:()=>{throw Error('permission denied');}}},
+    $anilist:{getAnimeCollection:bypass=>{collections.push(bypass);if(options.collectionError)throw Error(options.collectionError);return collection;},
       customQuery:(body,token)=>{
         requests.push(body);assert.equal(token,'','Public metadata works without token');
         if(options.query) return options.query(body);
@@ -61,6 +63,7 @@ function boot(options={}) {
         return {Media:{characters:{edges:[],pageInfo:{hasNextPage:false}}}};
       }}};
   sandbox.Math.random=()=>options.random ?? 0;
+  if(options.withoutDatabase) delete sandbox.$database;
   vm.runInNewContext(source+'\ninit()',sandbox);
   tray.update();
   return {handlers,storage,navigation,messages,requests,collections,
@@ -115,6 +118,7 @@ test('dub network errors do not become cached negatives or consume a pick/cooldo
     }
   });
   app.handlers.generate();assert.equal(app.navigation.length,0);assert.equal(app.storage.dubCache,undefined);
+  assert.ok(app.messages.some(m=>m.level==='error' && m.text.includes('English dub verification failed: rate limited')));
   assert.equal(generateButton(app).props.disabled,false);fail=false;app.handlers.generate();assert.equal(app.navigation.length,1);
 });
 test('taste metadata is batched and cached; recommendations weight only eligible titles',()=>{
@@ -149,4 +153,22 @@ test('taste changes preserve the current cycle; refresh forces a fresh collectio
   app.handlers.generate();assert.equal(app.navigation[1].params.id,'2');app.advance(5000);
   app.handlers['refresh-pool']();app.handlers.generate();assert.equal(app.navigation[2].params.id,'1');
   assert.deepEqual(app.collections,[false,true]);
+});
+test('dub, taste and search work when database permission and global are absent',()=>{
+  const app=boot({withoutDatabase:true,settings:{dubOnly:true,tasteEnabled:true,tasteSeeds:[{id:101,title:'Seed'}]},query:({variables:v})=>{
+    if(v.id) return {Media:{characters:{edges:[{voiceActors:[{id:9}]}],pageInfo:{hasNextPage:false}}}};
+    if(v.search) return {Page:{media:[media(102)]}};
+    return {Page:{media:v.ids.map(id=>({...media(id),tags:[],recommendations:{edges:[]}}))}};
+  }});
+  app.handlers.generate();assert.equal(app.navigation.length,1);
+  app.handlers['taste-query']({value:'anime'});app.handlers['taste-search']();
+  assert.ok(nodes(app.render()).some(n=>n.props.onClick==='taste-result-0'));
+  assert.equal(app.messages.some(m=>m.level==='error'),false);
+});
+test('collection failures report the actual operation and underlying error',()=>{
+  const app=boot({collectionError:'not logged in'});app.handlers.generate();
+  assert.equal(app.navigation.length,0);
+  assert.ok(app.messages.some(m=>m.level==='error' && m.text.includes('AniList collection loading failed: not logged in')));
+  app.handlers['refresh-pool']();
+  assert.ok(app.messages.some(m=>m.level==='error' && m.text.includes('Collection refresh failed: not logged in')));
 });

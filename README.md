@@ -33,6 +33,12 @@ English Dub Only checks actual **English voice-actor credits on that anime's Ani
 
 The eligible pool, collection and taste metadata remain cached for the current plugin session. Taste tags are fetched in batches of up to 50 titles; recommendation connections are fetched only for the selected seeds (the top 25 recommendations each). Rerolls reuse these records. First-time dub checks may take longer for large libraries. **Refresh roulette pool** fetches the collection again, clears metadata/dub caches and restarts the selection cycle. Changing normal filters also restarts the cycle. Settings persist across plugin restarts; the no-repeat cycle is session-only.
 
+## 0.1.2 — Public AniList queries
+
+Fixed Generate's `AniList data could not be loaded` error when dub or taste mode was enabled. The previous metadata helper called `$database.anilist.getToken()`, which requires the separate `anilist-token` permission and throws `permission denied` without it. Cast, taste and search queries now use public AniList access with an empty token. The unused `database` permission was removed; filter persistence still uses `storage`. No additional permissions are required.
+
+Errors now identify the failing operation and underlying message in both the toast and plugin logs. Regression tests deny token access and also run with no database global. The original failure and patched success were reproduced in the exact Goja version pinned by Seanime 3.10.3, using native Go collection/query fixtures. The [AniList Autopause example](https://github.com/nnotwen/n-seanime-extensions/blob/master/plugins/Anilist%20Autopause/anilist-autopause.json) explicitly requests token permission; the [Random Entry example](https://github.com/nnotwen/n-seanime-extensions/blob/master/plugins/Random%20Entry/provider.ts) confirms the collection and navigation calls.
+
 ## 0.1.1 — Seanime 3.10.3 compatibility
 
 Fixed `Component type "" not found`: the tray render callback must **return** its root component. The tray now uses explicit object builder arguments, a returned `stack`, and conditional array spreads so no null/undefined component enters `stack` or `flex`. Wrapped rows and native controls keep Generate prominent.

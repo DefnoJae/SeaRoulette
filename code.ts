@@ -59,12 +59,19 @@ function init() {
         }
         // customQuery returns the unwrapped GraphQL data, unlike an HTTP response.
         function query(query: string, variables: Record<string, any>): any {
-            const result = $anilist.customQuery({ query, variables }, $database.anilist.getToken() || "");
+            // Cast, search and taste metadata are public. getToken() requires
+            // anilist-token permission and throws before the request without it.
+            const result = $anilist.customQuery({ query, variables }, "");
             if (!result)
                 throw new Error("AniList returned no data");
             return result;
         }
         function titleOf(m: any) { return String(m?.title?.userPreferred || m?.title?.english || m?.title?.romaji || "Untitled"); }
+        function reportError(action: string, error: any) {
+            const detail = String(error?.message || error || "Unknown error");
+            console.error("SeaRoulette: " + action + " failed: " + detail);
+            ctx.toast.error("SeaRoulette: " + action + " failed: " + detail.slice(0, 220));
+        }
         function setArrayValue(arr: string[], value: string, on: boolean) {
             const exists = arr.indexOf(value) >= 0;
             if (on && !exists)
@@ -137,12 +144,13 @@ function init() {
             $storage.set("dubCache", dubCache);
             return value;
         }
-        function buildPool(): any[] {
+        function buildPool(onStage: (stage:string) => void): any[] {
             const key = JSON.stringify([settings.lists, settings.dubOnly, settings.minRating, settings.maxRating, settings.genres, settings.genreMode]);
             if (key === cacheKey)
                 return cachedPool;
             let pool = flattenCollection().filter(passesBasic);
             if (settings.dubOnly) {
+                onStage("English dub verification");
                 ctx.toast.info("SeaRoulette: checking English dub availability…");
                 pool = pool.filter((m: any) => hasEnglishDub(Number(m.id)));
             }
@@ -237,13 +245,16 @@ function init() {
             }
             generating = true;
             tray.update();
+            let stage = "AniList collection loading";
             try {
-                const pool = buildPool();
+                const pool = buildPool(value => stage = value);
                 if (!pool.length) {
                     ctx.toast.warning("SeaRoulette: no anime matched these filters.");
                     return;
                 }
+                stage = "Taste metadata loading";
                 prepareTaste(pool);
+                stage = "Anime selection";
                 const pick = choose(pool);
                 if (!pick)
                     return;
@@ -252,6 +263,7 @@ function init() {
                 cooldownUntil = Date.now() + 5000;
                 tray.update();
                 tray.close();
+                stage = "Opening anime page";
                 ctx.screen.navigateTo("/entry", { id: String(pick.id) });
                 ctx.toast.success("SeaRoulette picked " + lastPick);
                 function tick() {
@@ -261,8 +273,8 @@ function init() {
                 }
                 ctx.setTimeout(tick, 1000);
             }
-            catch (_) {
-                ctx.toast.error("SeaRoulette: AniList data could not be loaded. Try again; refresh the pool if needed.");
+            catch (error) {
+                reportError(stage, error);
             }
             finally {
                 generating = false;
@@ -286,7 +298,7 @@ function init() {
             }
             catch (e) {
                 tasteResults = [];
-                ctx.toast.error("SeaRoulette: taste search failed.");
+                reportError("Taste search", e);
             }
             tray.update();
         }
@@ -302,8 +314,8 @@ function init() {
                 invalidate();
                 ctx.toast.success("SeaRoulette pool refreshed.");
             }
-            catch (_) {
-                ctx.toast.error("SeaRoulette: could not refresh AniList.");
+            catch (error) {
+                reportError("Collection refresh", error);
             }
         });
         ctx.registerEventHandler("min-rating", (e: any) => { settings.minRating = ratingValue(e?.value, settings.minRating); invalidate(); });
