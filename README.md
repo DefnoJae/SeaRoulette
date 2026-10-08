@@ -30,6 +30,10 @@ Dub catalog data is provided by MAL-Dubs under its [AGPL-3.0 license](https://gi
 
 The pool and collection remain cached for the current plugin session. **Refresh roulette pool** fetches the collection again and restarts the selection cycle while preserving the valid dub catalog. Refresh is limited to once per minute. Changing filters also restarts the cycle. Settings persist across plugin restarts; the no-repeat cycle is session-only. Picks are uniformly random among remaining eligible titles, with no taste or search metadata requests.
 
+## 0.1.9 — Outside-library discovery
+
+Select **Outside library** in Lists to include titles absent from every status in your library. It can be combined with existing statuses using OR. Dub, rating and genre filters still apply. Discovery loads one 50-title batch at a time from AniList, ordered by popularity. Rerolls reuse the batch and avoid repeats until its eligible pool is exhausted; **Refresh roulette pool** advances to the next batch (once per minute). This samples batches rather than the entire AniList catalog. Empty batches need a manual refresh; no automatic scanning or retries occur. HTTP 429 blocks further discovery requests for Retry-After (60 seconds by default), then requires another click. Changing filters reuses discovery data. The normal library-only mode sends no discovery requests.
+
 ## 0.1.8 — Remove taste recommendations
 
 Removed taste controls, seed requirements, weighted selection, search, and associated AniList metadata requests and network permission. Old saved taste settings are ignored; list, dub, rating, and genre preferences remain.

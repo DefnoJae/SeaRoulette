@@ -2,7 +2,7 @@ function init() {
     $ui.register((ctx) => {
         const LISTS = [
             ["CURRENT", "Watching"], ["PLANNING", "Planning"], ["PAUSED", "Paused"],
-            ["COMPLETED", "Completed"], ["DROPPED", "Dropped"], ["REPEATING", "Repeating"],
+            ["COMPLETED", "Completed"], ["DROPPED", "Dropped"], ["REPEATING", "Repeating"], ["OUTSIDE", "Outside library"],
         ];
         const GENRES = ["Action", "Adventure", "Comedy", "Drama", "Ecchi", "Fantasy", "Horror", "Mahou Shoujo", "Mecha", "Music", "Mystery", "Psychological", "Romance", "Sci-Fi", "Slice of Life", "Sports", "Supernatural", "Thriller"];
         type Settings = {
@@ -23,6 +23,11 @@ function init() {
         let generating = false;
         let revision = 0;
         let lastRefreshAt = -Infinity;
+        let discovery: any[] | null = null;
+        let discoveryPage = 1;
+        let discoveryHasNext = true;
+        let blockedUntil = 0;
+        let lastDiscoveryAt = -Infinity;
         const DUB_URL = "https://raw.githubusercontent.com/MAL-Dubs/MAL-Dubs/main/data/dubInfo.json";
         let dubCatalog: any = $storage.get("dubCatalog");
         function validCatalog(value: any): boolean {
@@ -133,11 +138,52 @@ function init() {
             const malId = Number(media.idMal);
             return malId > 0 && (dubCatalog.dubbed.indexOf(malId) >= 0 || dubCatalog.incomplete.indexOf(malId) >= 0);
         }
+        async function loadDiscovery(expectedRevision: number) {
+            if (discovery !== null) return;
+            if (Date.now() < blockedUntil)
+                throw new Error("AniList rate limited. Wait " + Math.ceil((blockedUntil - Date.now()) / 1000) + "s, then click Generate. No automatic retry.");
+            const delay = Math.max(0, lastDiscoveryAt + 2500 - Date.now());
+            if (delay) await new Promise<void>(resolve => ctx.setTimeout(resolve, delay));
+            if (expectedRevision !== revision) return;
+            lastDiscoveryAt = Date.now();
+            const response = await ctx.fetch("https://graphql.anilist.co", {
+                method: "POST", headers: {"Content-Type":"application/json"}, timeout:15, noCloudflareBypass:true,
+                body: JSON.stringify({query: "query($page:Int!){Page(page:$page,perPage:50){pageInfo{hasNextPage} media(type:ANIME,sort:POPULARITY_DESC){id idMal genres meanScore title{userPreferred english romaji}}}}", variables:{page:discoveryPage}}),
+            });
+            if (response.status === 429) {
+                const key = Object.keys(response.headers || {}).find(k => k.toLowerCase() === "retry-after");
+                const seconds = Number(key ? response.headers[key] : 60);
+                blockedUntil = Date.now() + (Number.isFinite(seconds) ? Math.max(1,seconds) : 60) * 1000;
+                throw new Error("AniList rate limited. No automatic retry; wait before clicking Generate again.");
+            }
+            if (!response.ok) throw new Error("AniList HTTP " + response.status);
+            const result = response.json();
+            if (result?.errors?.length) throw new Error(String(result.errors[0].message));
+            const page = result?.data?.Page;
+            if (!Array.isArray(page?.media) || typeof page?.pageInfo?.hasNextPage !== "boolean")
+                throw new Error("Invalid discovery response");
+            if (expectedRevision !== revision) return;
+            discovery = page.media;
+            discoveryHasNext = page.pageInfo.hasNextPage;
+        }
         function buildPool(): any[] {
             const key = JSON.stringify([settings.lists, settings.dubOnly, settings.minRating, settings.maxRating, settings.genres, settings.genreMode]);
             if (key === cacheKey)
                 return cachedPool;
-            let pool = flattenCollection().filter(passesBasic);
+            let pool = flattenCollection();
+            if (settings.lists.indexOf("OUTSIDE") >= 0) {
+                const libraryIds: Record<string, boolean> = {};
+                for (const list of collectionCache.MediaListCollection.lists)
+                    for (const entry of (list?.entries || []))
+                        if (entry?.media?.id) libraryIds[String(entry.media.id)] = true;
+                const seen: Record<string, boolean> = {};
+                for (const m of discovery || []) {
+                    if (!m?.id || libraryIds[String(m.id)] || seen[String(m.id)]) continue;
+                    seen[String(m.id)] = true;
+                    pool.push(m);
+                }
+            }
+            pool = pool.filter(passesBasic);
             cachedPool = pool;
             cacheKey = key;
             used = [];
@@ -172,6 +218,13 @@ function init() {
             let stage = "AniList collection loading";
             const generationRevision = revision;
             try {
+                // Always load the full collection so outside picks exclude every status.
+                flattenCollection();
+                if (settings.lists.indexOf("OUTSIDE") >= 0) {
+                    stage = "Outside-library discovery";
+                    await loadDiscovery(generationRevision);
+                    if (generationRevision !== revision) return;
+                }
                 let pool = buildPool();
                 if (settings.dubOnly) {
                     stage = "English dub catalog loading";
@@ -181,7 +234,7 @@ function init() {
                     pool = pool.filter(hasEnglishDub);
                 }
                 if (!pool.length) {
-                    ctx.toast.warning("SeaRoulette: no anime matched these filters.");
+                    ctx.toast.warning(settings.lists.indexOf("OUTSIDE") >= 0 ? "SeaRoulette: no matches in this batch. Refresh roulette pool to try the next 50 titles." : "SeaRoulette: no anime matched these filters.");
                     return;
                 }
                 if (generationRevision !== revision)
@@ -224,6 +277,10 @@ function init() {
             lastRefreshAt = Date.now();
             try {
                 collectionCache = $anilist.getAnimeCollection(true);
+                if (settings.lists.indexOf("OUTSIDE") >= 0 && discovery !== null) {
+                    discoveryPage = discoveryHasNext ? discoveryPage + 1 : 1;
+                    discovery = null;
+                }
                 // Keep the valid dub catalog on refresh.
                 invalidate();
                 ctx.toast.success("SeaRoulette pool refreshed.");
@@ -246,7 +303,7 @@ function init() {
             const seconds = Math.max(0, Math.ceil((cooldownUntil - Date.now()) / 1000));
             const items: any[] = [
                 tray.text({
-                    text: "SeaRoulette 0.1.8",
+                    text: "SeaRoulette 0.1.9",
                     style: { fontSize: "20px", fontWeight: "700" }
                 }),
                 tray.button({
@@ -262,6 +319,7 @@ function init() {
                     style:{display:"grid",gridTemplateColumns:"repeat(3, minmax(0, 1fr))",gap:"8px"},
                     items: LISTS.map(x=>tray.checkbox({label:x[1],value:settings.lists.indexOf(x[0])>=0,onChange:"list-"+x[0],size:"sm"})),
                 }),
+                ...(settings.lists.indexOf("OUTSIDE") >= 0 ? [tray.text({text:"Outside library: 50-title batches by popularity. Refresh loads the next batch.",style:{fontSize:"12px",opacity:"0.7"}})] : []),
                 tray.flex({gap:2,
                     items:[
                         tray.text({text:"Genres",style:{fontWeight:"600"}}),
