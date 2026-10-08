@@ -15,14 +15,17 @@ const schemas = {
     checkbox: { label: 'string', value: 'boolean', onChange: 'string', size: 'string' },
     switch: { label: 'string', value: 'boolean', onChange: 'string' }, popover: { trigger: 'component', items: 'array' },
 };
-const media = (id, genres = ['Comedy'], meanScore = 80) => ({ id, genres, meanScore, title: { romaji: 'Anime ' + id } });
+const media = (id, genres = ['Comedy'], meanScore = 80) => ({ id, idMal: id, genres, meanScore, title: { romaji: 'Anime ' + id } });
 function boot(options = {}) {
     let now = 100000, render, tree;
-    const handlers = {}, rawHandlers = {}, timers = [], navigation = [], messages = [], requests = [], requestTimes = [], collections = [];
-    function advance(ms) { now += ms; while (timers.some(t => t.at <= now)) {
-        const i = timers.findIndex(t => t.at <= now);
-        timers.splice(i, 1)[0].fn();
-    } }
+    const handlers = {}, rawHandlers = {}, timers = [], navigation = [], messages = [], requests = [], catalogFetches = [], requestTimes = [], collections = [];
+    function advance(ms) {
+        now += ms;
+        while (timers.some(t => t.at <= now)) {
+            const i = timers.findIndex(t => t.at <= now);
+            timers.splice(i, 1)[0].fn();
+        }
+    }
     async function settle(promise) {
         let done = false, failure;
         Promise.resolve(promise).then(() => done = true, e => { failure = e; done = true; });
@@ -71,6 +74,27 @@ function boot(options = {}) {
             return { type, props };
         };
     const ctx = { newTray: () => tray, registerEventHandler: (name, fn) => { rawHandlers[name] = fn; handlers[name] = (...args) => settle(fn(...args)); },
+        fetch: async (url, fetchOptions) => {
+            if (url.includes('dubInfo.json')) {
+                catalogFetches.push(url);
+                if (options.fetch)
+                    return options.fetch(url, fetchOptions);
+                return { ok: true, status: 200, headers: {}, json: () => options.catalog || { dubbed: entries.map(m => m.idMal), incomplete: [] } };
+            }
+            const body = JSON.parse(fetchOptions.body);
+            requests.push(body);
+            requestTimes.push(now);
+            if (options.fetch)
+                return options.fetch(url, fetchOptions);
+            let data;
+            if (options.query)
+                data = options.query(body);
+            else if (body.variables.search)
+                data = { Page: { media: [media(101), media(102)] } };
+            else
+                data = { Page: { media: body.variables.ids.map(id => ({ ...media(id), tags: [], recommendations: { edges: [] } })) } };
+            return { ok: true, status: 200, headers: {}, json: () => ({ data }) };
+        },
         fieldRef: (value) => ({ current: value, setValue(value) { this.current = value; } }),
         screen: { navigateTo: (path, params) => navigation.push({ path, params }) },
         toast: Object.fromEntries(['info', 'warning', 'error', 'success'].map(level => [level, text => messages.push({ level, text })])),
@@ -82,32 +106,70 @@ function boot(options = {}) {
         // Match the installed manifest: reading a token must throw. Public
         // metadata queries must never call this API.
         $database: { anilist: { getToken: () => { throw Error('permission denied'); } } },
-        $anilist: { getAnimeCollection: bypass => { collections.push(bypass); if (options.collectionError)
-                throw Error(options.collectionError); return collection; },
-            customQuery: (body, token) => {
-                requests.push(body);
-                requestTimes.push(now);
-                assert.equal(token, '', 'Public metadata works without token');
-                if (options.query)
-                    return options.query(body);
-                if (body.variables.search)
-                    return { Page: { media: [media(101), media(102)] } };
-                if (body.variables.ids)
-                    return { Page: { media: body.variables.ids.map(id => ({ ...media(id), tags: [], recommendations: { edges: [] } })) } };
-                return { Media: { characters: { edges: [], pageInfo: { hasNextPage: false } } } };
-            } } };
+        $anilist: { getAnimeCollection: bypass => {
+                collections.push(bypass);
+                if (options.collectionError)
+                    throw Error(options.collectionError);
+                return collection;
+            },
+            customQuery: () => { throw Error('Native retrying helper must not be used'); } } };
     sandbox.Math.random = () => options.random ?? 0;
     if (options.withoutDatabase)
         delete sandbox.$database;
     vm.runInNewContext(source + '\ninit()', sandbox);
     tray.update();
-    return { handlers, rawHandlers, settle, storage, navigation, messages, requests, requestTimes, collections,
+    return { handlers, rawHandlers, settle, storage, navigation, messages, requests, catalogFetches, requestTimes, collections,
         render: () => { tray.update(); return tree; },
         advance,
         get tree() { return tree; } };
 }
 function nodes(root) { return [root, ...(root.props.items || []).flatMap(nodes), ...(root.props.trigger ? nodes(root.props.trigger) : [])]; }
 function generateButton(app) { return nodes(app.tree).find(n => n.props.onClick === 'generate'); }
+test('500-title dub pool uses one external catalog download and zero AniList metadata requests',async()=>{
+    const app=boot({settings:{dubOnly:true},entries:Array.from({length:500},(_,i)=>media(i+1)),catalog:{dubbed:[400],incomplete:[]}});
+    await app.handlers.generate();assert.equal(app.navigation[0].params.id,'400');
+    assert.equal(app.catalogFetches.length,1);assert.equal(app.requests.length,0);
+    app.advance(5000);await app.handlers.generate();assert.equal(app.catalogFetches.length,1);
+});
+test('catalog matches MAL IDs, includes recorded partial dubs, excludes missing IDs, and ignores old negative cast results',async()=>{
+    const app=boot({settings:{dubOnly:true},entries:[{...media(1),idMal:400},{...media(2),idMal:500},{...media(3),idMal:null}],catalog:{dubbed:[400,500],incomplete:[500]},storage:{dubCache:{'1':{value:false,checkedAt:100000}}}});
+    await app.handlers.generate();assert.equal(app.navigation[0].params.id,'1');assert.equal(app.requests.length,0);
+    app.advance(5000);await app.handlers.generate();assert.equal(app.navigation[1].params.id,'2');
+});
+test('saved catalog survives plugin restart without fetching',async()=>{
+    const app=boot({settings:{dubOnly:true},storage:{dubCatalog:{dubbed:[2],incomplete:[],fetchedAt:100000}}});
+    await app.handlers.generate();assert.equal(app.navigation[0].params.id,'2');assert.equal(app.catalogFetches.length,0);
+});
+test('catalog download failure uses a recent saved catalog but rejects missing/expired evidence',async()=>{
+    const offline=()=>{throw Error('offline');};
+    const app=boot({settings:{dubOnly:true},storage:{dubCatalog:{dubbed:[2],incomplete:[],fetchedAt:100000-2*86400000}},fetch:offline});
+    await app.handlers.generate();assert.equal(app.navigation[0].params.id,'2');
+    const empty=boot({settings:{dubOnly:true},fetch:offline});await empty.handlers.generate();assert.equal(empty.navigation.length,0);
+    const expired=boot({settings:{dubOnly:true},storage:{dubCatalog:{dubbed:[2],incomplete:[],fetchedAt:100000-8*86400000}},fetch:offline});
+    await expired.handlers.generate();assert.equal(expired.navigation.length,0);
+});
+test('429 stops immediately, schedules no retry, and suppresses clicks until Retry-After expires',async()=>{
+    let limited=true;
+    const app=boot({fetch:()=>limited?{ok:false,status:429,headers:{'retry-after':'60'}}:{ok:true,status:200,headers:{},json:()=>({data:{Page:{media:[media(101)]}}})}});
+    await app.handlers['taste-query']({value:'anime'});await app.handlers['taste-search']();
+    assert.equal(app.requests.length,1);app.advance(59000);
+    await app.handlers['taste-search']();assert.equal(app.requests.length,1);
+    app.advance(1000);assert.equal(app.requests.length,1,'Time passing never triggers a retry');
+    limited=false;await app.handlers['taste-search']();assert.equal(app.requests.length,2);
+});
+test('metadata and search requests remain paced, without the native retrying helper',async()=>{
+    const app=boot({settings:{tasteEnabled:true,tasteSeeds:[{id:101,title:'Seed'}]}});
+    await app.handlers['taste-query']({value:'anime'});
+    await app.settle(Promise.all([app.rawHandlers.generate(),app.rawHandlers['taste-search']()]));
+    assert.equal(app.requests.length,3);assert.equal(app.navigation.length,1);
+    for(let i=1;i<app.requestTimes.length;i++)assert.ok(app.requestTimes[i]-app.requestTimes[i-1]>=2500);
+});
+test('queued work also stops when an earlier request hits the quota',async()=>{
+    const app=boot({settings:{tasteEnabled:true,tasteSeeds:[{id:101,title:'Seed'}]},fetch:()=>({ok:false,status:429,headers:{'retry-after':'60'}})});
+    await app.handlers['taste-query']({value:'anime'});
+    await app.settle(Promise.all([app.rawHandlers.generate(),app.rawHandlers['taste-search']()]));
+    assert.equal(app.requests.length,1);assert.equal(app.navigation.length,0);
+});
 test('tray returns a known root with valid components in every conditional branch', async () => {
     const app = boot();
     assert.equal(app.tree.type, 'stack');
@@ -163,39 +225,6 @@ test('ALL genres and inclusive rating bounds', async () => {
         app.advance(5000);
     }
     assert.deepEqual(app.navigation.map(n => n.params.id), ['2', '3', '2']);
-});
-test('dub check examines later character pages, caches positive/negative evidence, and empty pools', async () => {
-    const app = boot({ settings: { dubOnly: true }, entries: [media(1), media(2)], query: ({ variables: v }) => ({ Media: { characters: { edges: v.id === 2 && v.page === 2 ? [{ voiceActors: [{ id: 900 }] }] : [], pageInfo: { hasNextPage: v.page === 1 } } } }) });
-    await app.handlers.generate();
-    assert.equal(app.navigation[0].params.id, '2');
-    assert.equal(app.requests.length, 4);
-    app.advance(5000);
-    await app.handlers.generate();
-    assert.equal(app.requests.length, 4);
-    assert.equal(app.storage.dubCache['1'].value, false);
-    assert.equal(app.storage.dubCache['2'].value, true);
-    const empty = boot({ settings: { dubOnly: true }, entries: [media(1)] });
-    await empty.handlers.generate();
-    await empty.handlers.generate();
-    assert.equal(empty.requests.length, 1);
-    assert.equal(empty.navigation.length, 0);
-});
-test('dub network errors do not become cached negatives or consume a pick/cooldown', async () => {
-    let fail = true;
-    const app = boot({ settings: { dubOnly: true }, entries: [media(1)], query: () => {
-            if (fail)
-                throw Error('rate limited');
-            return { Media: { characters: { edges: [{ voiceActors: [{ id: 9 }] }], pageInfo: { hasNextPage: false } } } };
-        }
-    });
-    await app.handlers.generate();
-    assert.equal(app.navigation.length, 0);
-    assert.equal(app.storage.dubCache, undefined);
-    assert.ok(app.messages.some(m => m.level === 'error' && m.text.includes('English dub verification failed: rate limited')));
-    assert.equal(generateButton(app).props.disabled, false);
-    fail = false;
-    await app.handlers.generate();
-    assert.equal(app.navigation.length, 1);
 });
 test('taste metadata is batched and cached; recommendations weight only eligible titles', async () => {
     const app = boot({ settings: { tasteEnabled: true, tasteSeeds: [{ id: 101, title: 'Seed' }] }, random: 0.5, query: ({ variables: v }) => ({ Page: { media: v.ids.map(id => ({ ...media(id, ['Action']), tags: [], recommendations: { edges: id === 101 ? [{ node: { mediaRecommendation: { id: 3 } } }, { node: { mediaRecommendation: { id: 999 } } }] : [] } })) } }) });
@@ -286,44 +315,11 @@ test('collection failures report the actual operation and underlying error', asy
     await app.handlers['refresh-pool']();
     assert.ok(app.messages.some(m => m.level === 'error' && m.text.includes('Collection refresh failed: not logged in')));
 });
-test('a large dub pool checks only the drawn candidate instead of scanning the library', async () => {
-    const app=boot({settings:{dubOnly:true},entries:Array.from({length:500},(_,i)=>media(i+1)),query:()=>({Media:{characters:{edges:[{voiceActors:[{id:9}]}],pageInfo:{hasNextPage:false}}}})});
-    await app.handlers.generate();
-    assert.equal(app.requests.length,1);
-    assert.equal(app.navigation[0].params.id,'1');
-    await app.handlers['refresh-pool'](); // disabled during cooldown? refresh keeps evidence
-    app.advance(5000);await app.handlers.generate();
-    assert.equal(app.requests.length,1,'Refresh keeps the confirmed dub record');
-});
-test('dub pagination, metadata and concurrent search share a paced request queue', async () => {
-    const app=boot({settings:{dubOnly:true,tasteEnabled:true,tasteSeeds:[{id:101,title:'Seed'}]},query:({variables:v})=>{
-        if(v.search)return {Page:{media:[media(102)]}};
-        if(v.ids)return {Page:{media:v.ids.map(id=>({...media(id),tags:[],recommendations:{edges:[]}}))}};
-        return {Media:{characters:{edges:v.page===2?[{voiceActors:[{id:9}]}]:[],pageInfo:{hasNextPage:v.page===1}}}};
-    }});
-    await app.handlers['taste-query']({value:'anime'});
-    const spin=app.rawHandlers.generate();
-    const search=app.rawHandlers['taste-search']();
-    const duplicate=app.rawHandlers.generate();
-    await app.settle(Promise.all([spin,search,duplicate]));
-    assert.equal(app.navigation.length,1);
-    assert.equal(app.requests.length,5);
-    for(let i=1;i<app.requestTimes.length;i++)assert.ok(app.requestTimes[i]-app.requestTimes[i-1]>=2500);
-});
-test('changing filters cancels a pending spin without opening an outdated pick', async () => {
-    const app=boot({settings:{dubOnly:true},entries:[media(1)],query:()=>({Media:{characters:{edges:[],pageInfo:{hasNextPage:true}}}})});
-    const spin=app.rawHandlers.generate();
-    for(let i=0;i<100;i++)await Promise.resolve();
-    assert.equal(app.requests.length,1);
-    await app.handlers['dub-only']({value:false});
-    await app.settle(spin);
-    assert.equal(app.requests.length,1);
-    assert.equal(app.navigation.length,0);
-    await app.handlers.generate();assert.equal(app.navigation.length,1);
-});
 test('refresh preserves expensive caches and repeated refresh clicks do not send more collection requests', async () => {
-    const app=boot({storage:{dubCache:{'1':{value:true,checkedAt:100000}}},settings:{dubOnly:true},entries:[media(1)]});
-    await app.handlers['refresh-pool']();await app.handlers['refresh-pool']();
+    const app = boot({ storage: { dubCache: { '1': { value: true, checkedAt: 100000 } } }, settings: { dubOnly: true }, entries: [media(1)] });
+    await app.handlers['refresh-pool']();
+    await app.handlers['refresh-pool']();
     await app.handlers.generate();
-    assert.deepEqual(app.collections,[true]);assert.equal(app.requests.length,0);
+    assert.deepEqual(app.collections, [true]);
+    assert.equal(app.requests.length, 0);
 });

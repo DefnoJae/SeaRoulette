@@ -29,11 +29,21 @@ Taste mode is not a hard genre clone. Your selected lists, dub preference, ratin
 
 Selected lists combine with OR; list, rating, dub and genre categories combine with AND. Ratings use AniList's **meanScore**, from 0 to 100, with inclusive bounds. Unrated titles count as 0. Genre matching can require any or all selected genres; no selected genres means no genre restriction. Open the Genres button to edit its compact popover.
 
-English Dub Only checks actual **English voice-actor credits on that anime's AniList character edges**, paging through characters until evidence is found or all pages are exhausted. It never infers a dub from English titles or country metadata. AniList's cast records can be incomplete: a dubbed title without recorded English credits is excluded. This verifies recorded dub production, not availability on a particular streaming service. Positive and negative checks persist for seven days; failed requests are never cached as negatives.
+English Dub Only matches the library's **MAL IDs** against the maintained [MAL-Dubs catalog](https://github.com/MAL-Dubs/MAL-Dubs/blob/main/data/dubInfo.json). Recorded full and partial English dubs qualify; this is not a guarantee that every episode is dubbed or available on a particular service. Titles absent from the catalog or without a MAL ID are excluded. Titles/language metadata are never used to guess dub availability. The catalog is refreshed at most daily and persists across restarts. If the source is unavailable, a saved catalog up to seven days old can be used; without valid evidence generation stops.
+
+Dub catalog data is provided by MAL-Dubs under its [AGPL-3.0 license](https://github.com/MAL-Dubs/MAL-Dubs/blob/main/LICENSE). SeaRoulette downloads it directly from the upstream URL; no catalog snapshot or upstream script is distributed in this repository.
 
 The pool, collection and taste metadata remain cached for the current plugin session. Taste tags are fetched in batches of up to 50 titles; recommendation connections are fetched only for the selected seeds (the top 25 recommendations each). Rerolls reuse these records. **Refresh roulette pool** fetches the collection again and restarts the selection cycle while preserving valid dub and taste records. Refresh is limited to once per minute. Changing normal filters also restarts the cycle. Settings persist across plugin restarts; the no-repeat cycle is session-only.
 
-## 0.1.3 — Request pacing and on-demand dub verification
+## 0.1.4 — Catalog-based dubs and no automatic metadata retries
+
+Removed per-title AniList cast queries completely. Even a large library now needs only one external catalog download for dub filtering, then local MAL-ID lookups. Taste scoring happens after this fully filtered pool is known.
+
+Public search and taste requests use `ctx.fetch` directly, with a 15-second timeout and the existing 2.5-second request queue, instead of Seanime's automatically retrying AniList helper. An HTTP 429 stops the operation immediately; `Retry-After` blocks subsequent requests until the wait expires. **No automatic retry is scheduled**, including for other queued work. You must click again after the wait. Normal collection access still uses Seanime's account-aware collection API; Seanime's own collection synchronization is outside this metadata queue.
+
+The manifest requests network access only to `raw.githubusercontent.com` (catalog) and `graphql.anilist.co` (public metadata). Grant these domains when updating the plugin. The tray displays **SeaRoulette 0.1.4** so the installed payload can be verified. If an earlier version's scan continues after updating, fully stop/restart Seanime once to terminate that old work.
+
+## 0.1.3 — Request pacing and on-demand dub verification (superseded)
 
 Generate no longer scans every title's cast before making the first pick. It draws candidates from the list/rating/genre pool, verifies a candidate's English cast only when needed, rejects confirmed non-dubs, and stops as soon as a valid pick is found. Cached positives and negatives are reused, including records saved by earlier versions. Weighted rejection produces the same taste-weighted distribution among eligible dubbed titles; an unverified title never becomes a final pick.
 
@@ -61,4 +71,4 @@ Run the contract and behavior tests with Node.js 24+:
 node --test tests/runtime.test.cjs
 ```
 
-These tests use a strict mock of Seanime's v3.10.3 builders/events and AniList responses. They cover valid render trees, navigation, the five-second cooldown, no repeats, filter logic, dub pagination/cache/error handling, seed limits, taste weights, and persistence. Type-check `code.ts` alongside Seanime v3.10.3's `plugin.d.ts` and `app.d.ts` using `tsc --noEmit --skipLibCheck --target es2020`. A live Seanime UI smoke test is still needed after updating the installed plugin.
+These tests use a strict mock of Seanime's v3.10.3 builders/events, HTTP responses and collection data. They cover valid render trees, navigation, the five-second cooldown, no repeats, filter logic, catalog matching/cache/offline behavior, seed limits, taste weights, persistence, paced requests and stopping without automatic retries after 429. Type-check `code.ts` alongside Seanime v3.10.3's `plugin.d.ts` and `app.d.ts` using `tsc --noEmit --skipLibCheck --target es2020`. A live Seanime UI smoke test is still needed after updating the installed plugin.

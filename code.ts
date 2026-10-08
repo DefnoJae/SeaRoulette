@@ -34,10 +34,33 @@ function init() {
         let requestQueue: Promise<void> = Promise.resolve();
         let lastRefreshAt = -Infinity;
         const metadata: Record<string, any> = {};
-        const dubCache: Record<string, {
-            value: boolean;
-            checkedAt: number;
-        }> = $storage.get("dubCache") as any || {};
+        const DUB_URL = "https://raw.githubusercontent.com/MAL-Dubs/MAL-Dubs/main/data/dubInfo.json";
+        let dubCatalog: any = $storage.get("dubCatalog");
+        let rateLimitedUntil = 0;
+        function validCatalog(value: any): boolean {
+            return !!value && Array.isArray(value.dubbed) && value.dubbed.length > 0 &&
+                value.dubbed.every((id: any) => Number.isInteger(id) && id > 0) &&
+                Array.isArray(value.incomplete) && value.incomplete.every((id: any) => Number.isInteger(id) && id > 0);
+        }
+        async function loadDubCatalog() {
+            if (validCatalog(dubCatalog) && Number.isFinite(dubCatalog.fetchedAt) && Date.now() - dubCatalog.fetchedAt < 24 * 60 * 60 * 1000)
+                return;
+            try {
+                const response = await ctx.fetch(DUB_URL, { timeout: 15, noCloudflareBypass: true });
+                if (!response.ok)
+                    throw new Error("Dub catalog HTTP " + response.status);
+                const data = response.json();
+                if (!validCatalog(data))
+                    throw new Error("Invalid dub catalog");
+                dubCatalog = { dubbed: data.dubbed, incomplete: data.incomplete, fetchedAt: Date.now() };
+                $storage.set("dubCatalog", dubCatalog);
+            }
+            catch (error) {
+                if (!validCatalog(dubCatalog) || !Number.isFinite(dubCatalog.fetchedAt) || Date.now() - dubCatalog.fetchedAt >= 7 * 24 * 60 * 60 * 1000)
+                    throw error;
+                ctx.toast.info("SeaRoulette: using the saved dub catalog while its source is unavailable.");
+            }
+        }
         const tray = ctx.newTray({
             withContent: true,
             width: "430px",
@@ -61,21 +84,36 @@ function init() {
             const n = Number(value ?? fallback);
             return Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : fallback;
         }
-        // customQuery returns the unwrapped GraphQL data, unlike an HTTP response.
+        // Public HTTP GraphQL responses wrap metadata in the data property.
         function query(query: string, variables: Record<string, any>, expectedRevision = revision): Promise<any> {
-            // Cast, search and taste metadata are public. getToken() requires
-            // anilist-token permission and throws before the request without it.
+            // Direct public HTTP requests have no hidden AniList retry loop.
             const request = requestQueue.then(async () => {
+                if (Date.now() < rateLimitedUntil)
+                    throw new Error("AniList rate limited. Wait " + Math.ceil((rateLimitedUntil - Date.now()) / 1000) + "s, then try again.");
                 const delay = Math.max(0, lastRequestAt + 2500 - Date.now());
                 if (delay)
                     await new Promise<void>(resolve => ctx.setTimeout(resolve, delay));
                 if (expectedRevision !== revision)
                     throw new Error("Filters changed");
                 lastRequestAt = Date.now();
-                const result = $anilist.customQuery({ query, variables }, "");
-                if (!result)
+                const response = await ctx.fetch("https://graphql.anilist.co", {
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ query, variables }), timeout: 15, noCloudflareBypass: true,
+                });
+                if (response.status === 429) {
+                    const retryHeader = Object.keys(response.headers).find(key => key.toLowerCase() === "retry-after");
+                    const wait = Number(retryHeader ? response.headers[retryHeader] : "60");
+                    rateLimitedUntil = Date.now() + (Number.isFinite(wait) ? Math.max(1, wait) : 60) * 1000;
+                    throw new Error("AniList rate limited. No automatic retry; wait before trying again.");
+                }
+                if (!response.ok)
+                    throw new Error("AniList HTTP " + response.status);
+                const result = response.json();
+                if (result?.errors?.length)
+                    throw new Error(String(result.errors[0].message || "AniList query failed"));
+                if (!result?.data)
                     throw new Error("AniList returned no data");
-                return result;
+                return result.data;
             });
             requestQueue = request.then(() => undefined, () => undefined);
             return request;
@@ -139,39 +177,15 @@ function init() {
             }
             return true;
         }
-        async function hasEnglishDub(id: number, expectedRevision: number): Promise<boolean> {
-            const cached = dubCache[String(id)];
-            if (cached && Date.now() - cached.checkedAt < 7 * 24 * 60 * 60 * 1000)
-                return cached.value;
-            let page = 1;
-            let value = false;
-            while (true) {
-                const data = await query(`query($id:Int!,$page:Int!){Media(id:$id,type:ANIME){characters(page:$page,perPage:25){pageInfo{hasNextPage} edges{voiceActors(language:ENGLISH){id}}}}}`, { id, page }, expectedRevision);
-                const characters = data?.Media?.characters;
-                if (!Array.isArray(characters?.edges) || typeof characters?.pageInfo?.hasNextPage !== "boolean")
-                    throw new Error("Could not verify English cast");
-                value = characters.edges.some((e: any) => (e?.voiceActors || []).length > 0);
-                if (value || !characters.pageInfo.hasNextPage)
-                    break;
-                page++;
-            }
-            dubCache[String(id)] = { value, checkedAt: Date.now() };
-            $storage.set("dubCache", dubCache);
-            return value;
+        function hasEnglishDub(media: any): boolean {
+            const malId = Number(media.idMal);
+            return malId > 0 && (dubCatalog.dubbed.indexOf(malId) >= 0 || dubCatalog.incomplete.indexOf(malId) >= 0);
         }
         function buildPool(): any[] {
             const key = JSON.stringify([settings.lists, settings.dubOnly, settings.minRating, settings.maxRating, settings.genres, settings.genreMode]);
             if (key === cacheKey)
                 return cachedPool;
             let pool = flattenCollection().filter(passesBasic);
-            // Unknown dubs are checked only when drawn, rather than scanning
-            // the entire library. Rejecting non-dubs preserves the same weighted
-            // distribution among verified eligible candidates.
-            if (settings.dubOnly)
-                pool = pool.filter(m => {
-                    const cached = dubCache[String(m.id)];
-                    return !cached || Date.now() - cached.checkedAt >= 7 * 24 * 60 * 60 * 1000 || cached.value;
-                });
             cachedPool = pool;
             cacheKey = key;
             used = [];
@@ -266,7 +280,14 @@ function init() {
             let stage = "AniList collection loading";
             const generationRevision = revision;
             try {
-                const pool = buildPool();
+                let pool = buildPool();
+                if (settings.dubOnly) {
+                    stage = "English dub catalog loading";
+                    await loadDubCatalog();
+                    if (generationRevision !== revision)
+                        return;
+                    pool = pool.filter(hasEnglishDub);
+                }
                 if (!pool.length) {
                     ctx.toast.warning("SeaRoulette: no anime matched these filters.");
                     return;
@@ -277,20 +298,7 @@ function init() {
                 if (generationRevision !== revision)
                     return;
                 stage = "Anime selection";
-                let pick = choose(pool);
-                while (pick && settings.dubOnly) {
-                    stage = "English dub verification";
-                    if (await hasEnglishDub(Number(pick.id), generationRevision))
-                        break;
-                    if (generationRevision !== revision)
-                        return;
-                    pool.splice(pool.indexOf(pick), 1);
-                    pick = pool.length ? choose(pool) : undefined;
-                }
-                if (generationRevision !== revision)
-                    return;
-                if (!pick && !pool.length)
-                    ctx.toast.warning("SeaRoulette: no anime matched these filters.");
+                const pick = choose(pool);
                 if (!pick)
                     return;
                 used.push(Number(pick.id));
@@ -403,7 +411,7 @@ function init() {
             const seconds = Math.max(0, Math.ceil((cooldownUntil - Date.now()) / 1000));
             const items: any[] = [
                 tray.text({
-                    text: "SeaRoulette",
+                    text: "SeaRoulette 0.1.4",
                     style: { fontSize: "20px", fontWeight: "700" }
                 }),
                 tray.text({
