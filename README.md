@@ -8,22 +8,17 @@ SeaRoulette is a Seanime plugin that turns your AniList library into a configura
 - Optional English-dub-only filtering.
 - Minimum and maximum AniList rating filters.
 - Multi-select genres with **ANY** or **ALL** matching.
-- **Taste Filter:** choose 1–5 anime you like. SeaRoulette weights candidates using genre similarity, shared tags and AniList recommendations.
 - Every spin immediately opens the selected anime's Seanime page.
 - Five-second cooldown between spins.
 - No repeats until the eligible pool is exhausted.
 - Filter settings persist between sessions.
-- Cached collection, eligible pool (including empty results), and taste metadata avoid repeated AniList requests during rerolls.
+- Cached collection and eligible pool (including empty results) avoid repeated AniList requests during rerolls.
 
 ## Install
 
 Add the raw manifest URL to Seanime:
 
 `https://raw.githubusercontent.com/DefnoJae/SeaRoulette/main/Manifest.json`
-
-## Taste Filter
-
-Taste mode is not a hard genre clone. Your selected lists, dub preference, rating range and genre filters first determine the eligible pool. The 1–5 taste anime then influence which eligible title is more likely to be selected. Shared genres and rank-weighted tags increase similarity, and direct AniList recommendations receive a stronger weight. Every eligible title retains a nonzero chance. Enabling taste mode requires at least one seed. Changing seeds preserves the current no-repeat cycle.
 
 ## Filters and caching
 
@@ -33,7 +28,11 @@ English Dub Only matches the library's **MAL IDs** against the maintained [MAL-D
 
 Dub catalog data is provided by MAL-Dubs under its [AGPL-3.0 license](https://github.com/MAL-Dubs/MAL-Dubs/blob/main/LICENSE). SeaRoulette downloads it directly from the upstream URL; no catalog snapshot or upstream script is distributed in this repository.
 
-The pool, collection and taste metadata remain cached for the current plugin session. Taste tags are fetched in batches of up to 50 titles; recommendation connections are fetched only for the selected seeds (the top 25 recommendations each). Rerolls reuse these records. **Refresh roulette pool** fetches the collection again and restarts the selection cycle while preserving valid dub and taste records. Refresh is limited to once per minute. Changing normal filters also restarts the cycle. Settings persist across plugin restarts; the no-repeat cycle is session-only.
+The pool and collection remain cached for the current plugin session. **Refresh roulette pool** fetches the collection again and restarts the selection cycle while preserving the valid dub catalog. Refresh is limited to once per minute. Changing filters also restarts the cycle. Settings persist across plugin restarts; the no-repeat cycle is session-only. Picks are uniformly random among remaining eligible titles, with no taste or search metadata requests.
+
+## 0.1.8 — Remove taste recommendations
+
+Removed taste controls, seed requirements, weighted selection, search, and associated AniList metadata requests and network permission. Old saved taste settings are ignored; list, dub, rating, and genre preferences remain.
 
 ## 0.1.7 — Three-column filter rows
 
@@ -83,4 +82,4 @@ Run the contract and behavior tests with Node.js 24+:
 node --test tests/runtime.test.cjs
 ```
 
-These tests use a strict mock of Seanime's v3.10.3 builders/events, HTTP responses and collection data. They cover valid render trees, navigation, the five-second cooldown, no repeats, filter logic, catalog matching/cache/offline behavior, seed limits, taste weights, persistence, paced requests and stopping without automatic retries after 429. Type-check `code.ts` alongside Seanime v3.10.3's `plugin.d.ts` and `app.d.ts` using `tsc --noEmit --skipLibCheck --target es2020`. A live Seanime UI smoke test is still needed after updating the installed plugin.
+These tests use a strict mock of Seanime's v3.10.3 builders/events, HTTP responses and collection data. They cover valid render trees, navigation, the five-second cooldown, no repeats, filter logic, catalog matching/cache/offline behavior, persistence, ignoring legacy taste settings, and generation without metadata requests. Type-check `code.ts` alongside Seanime v3.10.3's `plugin.d.ts` and `app.d.ts` using `tsc --noEmit --skipLibCheck --target es2020`. A live Seanime UI smoke test is still needed after updating the installed plugin.

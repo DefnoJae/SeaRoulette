@@ -151,40 +151,9 @@ test('catalog download failure uses a recent saved catalog but rejects missing/e
     const expired=boot({settings:{dubOnly:true},storage:{dubCatalog:{dubbed:[2],incomplete:[],fetchedAt:100000-8*86400000}},fetch:offline});
     await expired.handlers.generate();assert.equal(expired.navigation.length,0);
 });
-test('429 stops immediately, schedules no retry, and suppresses clicks until Retry-After expires',async()=>{
-    let limited=true;
-    const app=boot({fetch:()=>limited?{ok:false,status:429,headers:{'retry-after':'60'}}:{ok:true,status:200,headers:{},json:()=>({data:{Page:{media:[media(101)]}}})}});
-    await app.handlers['taste-query']({value:'anime'});await app.handlers['taste-search']();
-    assert.equal(app.requests.length,1);app.advance(59000);
-    await app.handlers['taste-search']();assert.equal(app.requests.length,1);
-    app.advance(1000);assert.equal(app.requests.length,1,'Time passing never triggers a retry');
-    limited=false;await app.handlers['taste-search']();assert.equal(app.requests.length,2);
-});
-test('metadata and search requests remain paced, without the native retrying helper',async()=>{
-    const app=boot({settings:{tasteEnabled:true,tasteSeeds:[{id:101,title:'Seed'}]}});
-    await app.handlers['taste-query']({value:'anime'});
-    await app.settle(Promise.all([app.rawHandlers.generate(),app.rawHandlers['taste-search']()]));
-    assert.equal(app.requests.length,3);assert.equal(app.navigation.length,1);
-    for(let i=1;i<app.requestTimes.length;i++)assert.ok(app.requestTimes[i]-app.requestTimes[i-1]>=2500);
-});
-test('queued work also stops when an earlier request hits the quota',async()=>{
-    const app=boot({settings:{tasteEnabled:true,tasteSeeds:[{id:101,title:'Seed'}]},fetch:()=>({ok:false,status:429,headers:{'retry-after':'60'}})});
-    await app.handlers['taste-query']({value:'anime'});
-    await app.settle(Promise.all([app.rawHandlers.generate(),app.rawHandlers['taste-search']()]));
-    assert.equal(app.requests.length,1);assert.equal(app.navigation.length,0);
-});
 test('tray returns a known root with valid components in every conditional branch', async () => {
     const app = boot();
     assert.equal(app.tree.type, 'stack');
-    await app.handlers['taste-query']({ value: 'anime' });
-    await app.handlers['taste-search']();
-    app.render();
-    for (let i = 0; i < 5; i++) {
-        await app.handlers['taste-result-0']();
-        await app.handlers['taste-query']({ value: 'anime' });
-        await app.handlers['taste-search']();
-        app.render();
-    }
     await app.handlers.generate();
     app.render();
     app.advance(5000);
@@ -229,40 +198,7 @@ test('ALL genres and inclusive rating bounds', async () => {
     }
     assert.deepEqual(app.navigation.map(n => n.params.id), ['2', '3', '2']);
 });
-test('taste metadata is batched and cached; recommendations weight only eligible titles', async () => {
-    const app = boot({ settings: { tasteEnabled: true, tasteSeeds: [{ id: 101, title: 'Seed' }] }, random: 0.5, query: ({ variables: v }) => ({ Page: { media: v.ids.map(id => ({ ...media(id, ['Action']), tags: [], recommendations: { edges: id === 101 ? [{ node: { mediaRecommendation: { id: 3 } } }, { node: { mediaRecommendation: { id: 999 } } }] : [] } })) } }) });
-    await app.handlers.generate();
-    assert.equal(app.navigation[0].params.id, '3');
-    assert.equal(app.requests.length, 2);
-    app.advance(5000);
-    await app.handlers.generate();
-    assert.equal(app.requests.length, 2);
-    assert.ok(app.navigation.every(n => ['1', '2', '3'].includes(n.params.id)));
-});
-test('tag similarity can weight a candidate without shared genres', async () => {
-    const app = boot({ entries: [media(1, ['Drama']), media(2, ['Action'])], random: 0.5, settings: { tasteEnabled: true, tasteSeeds: [{ id: 101, title: 'Seed' }] }, query: ({ variables: v }) => ({ Page: { media: v.ids.map(id => ({ ...media(id, ['Fantasy']), tags: id === 1 ? [] : [{ id: 50, rank: 100 }], recommendations: { edges: [] } })) } }) });
-    await app.handlers.generate();
-    assert.equal(app.navigation[0].params.id, '2');
-});
-test('taste search uses unwrapped data, limits to five unique seeds and supports removal', async () => {
-    const app = boot({ query: ({ variables: v }) => ({ Page: { media: Array.from({ length: 8 }, (_, i) => media(101 + i)) } }) });
-    async function search() { await app.handlers['taste-query']({ value: 'anime' }); await app.handlers['taste-search'](); }
-    await search();
-    await app.handlers['taste-result-0']();
-    await search();
-    await app.handlers['taste-result-0']();
-    assert.equal(app.storage.settings.tasteSeeds.length, 1);
-    for (let i = 1; i < 6; i++) {
-        await search();
-        await app.handlers['taste-result-' + i]();
-    }
-    assert.equal(app.storage.settings.tasteSeeds.length, 5);
-    assert.equal(nodes(app.render()).some(n => n.props.onClick === 'taste-search'), false);
-    await app.handlers['remove-seed-0']();
-    assert.equal(app.storage.settings.tasteSeeds.length, 4);
-    app.render();
-});
-test('saved empty lists persist, invalid ratings are ignored, inverted ranges and missing seeds are rejected', async () => {
+test('saved empty lists persist, invalid ratings are ignored, inverted ranges are rejected', async () => {
     const app = boot({ settings: { lists: [] } });
     await app.handlers.generate();
     assert.equal(app.collections.length, 0);
@@ -274,19 +210,13 @@ test('saved empty lists persist, invalid ratings are ignored, inverted ranges an
     await app.handlers.generate();
     assert.equal(app.navigation.length, 0);
     await app.handlers['max-rating']({ value: '100' });
-    await app.handlers['taste-enabled']({ value: true });
-    await app.handlers.generate();
-    assert.equal(app.navigation.length, 0);
     const restored = boot({ settings: app.storage.settings });
     assert.equal(nodes(restored.tree).find(n => n.props.onChange === 'min-rating').props.value, '90');
 });
-test('taste changes preserve the current cycle; refresh forces a fresh collection and resets it', async () => {
+test('refresh forces a fresh collection and resets the current cycle', async () => {
     const app = boot();
     await app.handlers.generate();
     app.advance(5000);
-    await app.handlers['taste-query']({ value: 'anime' });
-    await app.handlers['taste-search']();
-    await app.handlers['taste-result-0']();
     await app.handlers.generate();
     assert.equal(app.navigation[1].params.id, '2');
     app.advance(5000);
@@ -295,20 +225,13 @@ test('taste changes preserve the current cycle; refresh forces a fresh collectio
     assert.equal(app.navigation[2].params.id, '1');
     assert.deepEqual(app.collections, [false, true]);
 });
-test('dub, taste and search work when database permission and global are absent', async () => {
-    const app = boot({ withoutDatabase: true, settings: { dubOnly: true, tasteEnabled: true, tasteSeeds: [{ id: 101, title: 'Seed' }] }, query: ({ variables: v }) => {
-            if (v.id)
-                return { Media: { characters: { edges: [{ voiceActors: [{ id: 9 }] }], pageInfo: { hasNextPage: false } } } };
-            if (v.search)
-                return { Page: { media: [media(102)] } };
-            return { Page: { media: v.ids.map(id => ({ ...media(id), tags: [], recommendations: { edges: [] } })) } };
-        } });
-    await app.handlers.generate();
-    assert.equal(app.navigation.length, 1);
-    await app.handlers['taste-query']({ value: 'anime' });
-    await app.handlers['taste-search']();
-    assert.ok(nodes(app.render()).some(n => n.props.onClick === 'taste-result-0'));
-    assert.equal(app.messages.some(m => m.level === 'error'), false);
+test('old enabled taste settings do not block generation or send metadata requests',async()=>{
+ for(const tasteSeeds of [[],[{id:101,title:'Old seed'}]]){
+ const app=boot({withoutDatabase:true,settings:{dubOnly:true,tasteEnabled:true,tasteSeeds}});
+ await app.handlers.generate();assert.equal(app.navigation.length,1);assert.equal(app.requests.length,0);
+ assert.equal(Object.keys(app.handlers).some(n=>n.includes('taste')),false);
+ await app.handlers['dub-only']({value:false});assert.equal('tasteEnabled' in app.storage.settings,false);assert.equal('tasteSeeds' in app.storage.settings,false);
+ }
 });
 test('collection failures report the actual operation and underlying error', async () => {
     const app = boot({ collectionError: 'not logged in' });
