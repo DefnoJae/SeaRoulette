@@ -412,7 +412,7 @@ function init() {
             const seconds = Math.max(0, Math.ceil((cooldownUntil - Date.now()) / 1000));
             const items: any[] = [
                 tray.text({
-                    text: "SeaRoulette 0.1.6",
+                    text: "SeaRoulette 0.1.7",
                     style: { fontSize: "20px", fontWeight: "700" }
                 }),
                 tray.button({
@@ -423,19 +423,21 @@ function init() {
                         text: "Last pick: " + lastPick,
                         style: { opacity: "0.7", fontSize: "12px" }
                     })] : []),
-                tray.dropdownMenu({
-                    trigger: tray.button({label:"Lists · " + (settings.lists.length === 1 ? LISTS.find(x=>x[0]===settings.lists[0])?.[1] : settings.lists.length + " selected") + " ▾",size:"sm"}),
-                    items: LISTS.map(x=>tray.dropdownMenuItem({item:tray.text({text:(settings.lists.indexOf(x[0])>=0?"✓ ":"＋ ")+x[1]}),onClick:"list-"+x[0]})),
+                tray.text({text:"Lists",style:{fontWeight:"600"}}),
+                tray.div({
+                    style:{display:"grid",gridTemplateColumns:"repeat(3, minmax(0, 1fr))",gap:"8px"},
+                    items: LISTS.map(x=>tray.checkbox({label:x[1],value:settings.lists.indexOf(x[0])>=0,onChange:"list-"+x[0],size:"sm"})),
                 }),
-                tray.dropdownMenu({
-                    trigger:tray.button({label:"Genres · " + (settings.genres.length ? settings.genres.length + " selected · " + settings.genreMode : "Any") + " ▾",size:"sm"}),
-                    className:"max-h-[300px] overflow-y-auto",
+                tray.flex({gap:2,
                     items:[
-                        ...GENRES.map(g=>tray.dropdownMenuItem({item:tray.text({text:(settings.genres.indexOf(g)>=0?"✓ ":"＋ ")+g}),onClick:"genre-"+g})),
-                        tray.dropdownMenuSeparator({}),
-                        tray.dropdownMenuItem({item:tray.text({text:(settings.genreMode==="ANY"?"✓ ":"")+"Match ANY selected genre"}),onClick:"genre-mode-any"}),
-                        tray.dropdownMenuItem({item:tray.text({text:(settings.genreMode==="ALL"?"✓ ":"")+"Match ALL selected genres"}),onClick:"genre-mode-all"}),
+                        tray.text({text:"Genres",style:{fontWeight:"600"}}),
+                        tray.button({label:"ANY",onClick:"genre-mode-any",size:"xs",intent:settings.genreMode==="ANY"?"primary-subtle":"gray"}),
+                        tray.button({label:"ALL",onClick:"genre-mode-all",size:"xs",intent:settings.genreMode==="ALL"?"primary-subtle":"gray"}),
                     ],
+                }),
+                tray.div({
+                    style:{display:"grid",gridTemplateColumns:"repeat(3, minmax(0, 1fr))",gap:"8px"},
+                    items:GENRES.map(g=>tray.checkbox({label:g,value:settings.genres.indexOf(g)>=0,onChange:"genre-"+g,size:"sm"})),
                 }),
                 tray.switch({
                     label: "English dub only",

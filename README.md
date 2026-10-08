@@ -27,7 +27,7 @@ Taste mode is not a hard genre clone. Your selected lists, dub preference, ratin
 
 ## Filters and caching
 
-Selected lists combine with OR; list, rating, dub and genre categories combine with AND. Ratings use AniList's **meanScore**, from 0 to 100, with inclusive bounds. Unrated titles count as 0. Genre matching can require any or all selected genres; no selected genres means no genre restriction. Open the Lists or Genres dropdown to toggle multiple choices. Checkmarks indicate selections; ANY/ALL matching is at the bottom of the scrollable Genres dropdown.
+Selected lists combine with OR; list, rating, dub and genre categories combine with AND. Ratings use AniList's **meanScore**, from 0 to 100, with inclusive bounds. Unrated titles count as 0. Lists and Genres are always visible in three-column checkbox grids. Select multiple choices and use the ANY/ALL buttons beside Genres to set matching; no selected genres means no genre restriction.
 
 English Dub Only matches the library's **MAL IDs** against the maintained [MAL-Dubs catalog](https://github.com/MAL-Dubs/MAL-Dubs/blob/main/data/dubInfo.json). Recorded full and partial English dubs qualify; this is not a guarantee that every episode is dubbed or available on a particular service. Titles absent from the catalog or without a MAL ID are excluded. Titles/language metadata are never used to guess dub availability. The catalog is refreshed at most daily and persists across restarts. If the source is unavailable, a saved catalog up to seven days old can be used; without valid evidence generation stops.
 
@@ -35,7 +35,11 @@ Dub catalog data is provided by MAL-Dubs under its [AGPL-3.0 license](https://gi
 
 The pool, collection and taste metadata remain cached for the current plugin session. Taste tags are fetched in batches of up to 50 titles; recommendation connections are fetched only for the selected seeds (the top 25 recommendations each). Rerolls reuse these records. **Refresh roulette pool** fetches the collection again and restarts the selection cycle while preserving valid dub and taste records. Refresh is limited to once per minute. Changing normal filters also restarts the cycle. Settings persist across plugin restarts; the no-repeat cycle is session-only.
 
-## 0.1.6 — Compact multi-select dropdowns
+## 0.1.7 — Three-column filter rows
+
+Removed the failing dropdown menus. Lists and Genres now use native checkboxes in three-column grids, with ANY/ALL buttons beside the Genres heading. Selection settings, cooldown, navigation, and keeping the tray open are preserved.
+
+## 0.1.6 — Compact multi-select dropdowns (superseded)
 
 Lists and Genres now use native dropdown menus with checked selections and compact summaries. The Genres menu scrolls and includes ANY/ALL matching. Taste search and seeds appear only when Taste Recommendations is enabled. Removed redundant headings and explanatory text from the tray; Generate remains prominent and keeps the tray open.
 

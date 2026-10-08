@@ -8,6 +8,7 @@ const source = stripTypeScriptTypes(fs.readFileSync(require('node:path').join(__
 // frontend registry. Returning a component from render is essential even
 // though plugin.d.ts incorrectly declares builders' return type as void.
 const schemas = {
+    div: {items:'array'},
     stack: { items: 'array', gap: 'number' }, flex: { items: 'array', gap: 'number', direction: 'string' },
     text: { text: 'string' }, button: { label: 'string', onClick: 'string', intent: 'string', disabled: 'boolean', loading: 'boolean', size: 'string' },
     input: { label: 'string', value: 'string', placeholder: 'string', onChange: 'string', fieldRef: 'object' },
