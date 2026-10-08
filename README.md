@@ -30,6 +30,10 @@ Dub catalog data is provided by MAL-Dubs under its [AGPL-3.0 license](https://gi
 
 The pool and collection remain cached for the current plugin session. **Refresh roulette pool** fetches the collection again and restarts the selection cycle while preserving the valid dub catalog. Refresh is limited to once per minute. Changing filters also restarts the cycle. Settings persist across plugin restarts; the no-repeat cycle is session-only. Picks are uniformly random among remaining eligible titles, with no taste or search metadata requests.
 
+## 0.1.12 — Compact tray and corrected header
+
+Replaced the header's full-width flex text nodes with a two-column grid and a single unbroken title. Reduced tray width, card padding, gaps, headings, and button heights. Genres start collapsed to keep the initial panel short; click Genres for its three-column selection grid. ANY/ALL uses short labels without check marks that could wrap. All filter settings and generation behavior remain unchanged.
+
 ## 0.1.11 — Dark card and pill redesign
 
 Rebuilt the tray around the supplied visual reference using supported Seanime containers, buttons, text, inputs, and a native switch. Compact header, prominent purple gradient Generate action, rounded dark cards, three-column list and genre pills, side-by-side Dub and collapsible Rating Range, collapsible Genres, and a collapsed Advanced section. Selected pills display a check mark as well as purple styling. No dropdowns, taste feature, or genre search. All selection, filtering, caching, discovery, navigation, cooldown, and no-repeat logic is preserved. The dice header uses the system emoji because the repository has no logo asset. Exact icon and control appearance depends on Seanime and the system font.

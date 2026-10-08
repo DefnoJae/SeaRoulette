@@ -310,7 +310,7 @@ test('redesigned tray sections expand safely and pills support multiple selectio
  await app.handlers['genre-Comedy']();await app.handlers['genre-Romance']();
  assert.deepEqual(app.storage.settings.genres,['Comedy','Romance']);
  await app.handlers['genre-mode-all']();assert.equal(app.storage.settings.genreMode,'ALL');
- await app.handlers['toggle-genres']();assert.equal(nodes(app.tree).some(n=>n.props.onClick==='genre-Comedy'),false);
+ await app.handlers['toggle-genres']();await app.handlers['toggle-genres']();assert.equal(nodes(app.tree).some(n=>n.props.onClick==='genre-Comedy'),false);
  await app.handlers['toggle-genres']();assert.ok(nodes(app.tree).find(n=>n.props.onClick==='genre-Comedy').props.label.startsWith('✓'));
  await app.handlers['toggle-rating']();await app.handlers['toggle-advanced']();
  assert.equal(nodes(app.tree).some(n=>n.props.onClick==='refresh-pool'),false);

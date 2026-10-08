@@ -55,7 +55,7 @@ function init() {
         }
         const tray = ctx.newTray({
             withContent: true,
-            width: "480px",
+            width: "430px",
             iconUrl: "https://seanime.app/logo_2.png",
         });
         function loadSettings(): Settings {
@@ -310,18 +310,18 @@ function init() {
         ctx.registerEventHandler("genre-mode-all", () => { settings.genreMode = "ALL"; invalidate(); });
         ctx.registerEventHandler("dub-only", (e: any) => { settings.dubOnly = !!(e?.value ?? e); invalidate(); });
         let ratingOpen = false;
-        let genresOpen = true;
+        let genresOpen = false;
         let advancedOpen = false;
         ctx.registerEventHandler("toggle-rating", () => { ratingOpen = !ratingOpen; tray.update(); });
         ctx.registerEventHandler("toggle-genres", () => { genresOpen = !genresOpen; tray.update(); });
         ctx.registerEventHandler("toggle-advanced", () => { advancedOpen = !advancedOpen; tray.update(); });
-        const muted = { color: "#9692b3", fontSize: "12px" };
-        const cardStyle = { background: "#12121b", border: "1px solid #2b293c", borderRadius: "16px", padding: "14px", minWidth: "0" };
-        function card(items: any[]) { return tray.stack({ items, gap: 3, style: cardStyle }); }
+        const muted = { color: "#9692b3", fontSize: "11px", lineHeight: "1.3" };
+        const cardStyle = { background: "#12121b", border: "1px solid #2b293c", borderRadius: "12px", padding: "10px", minWidth: "0" };
+        function card(items: any[]) { return tray.stack({ items, gap: 2, style: cardStyle }); }
         function pill(label: string, selected: boolean, onClick: string) {
             return tray.button({ label: (selected ? "✓  " : "") + label, onClick, intent: "gray", size: "sm", style: {
-                    width: "100%", minWidth: "0", height: "36px", padding: "4px 8px", borderRadius: "20px",
-                    fontSize: "12px", fontWeight: "500", whiteSpace: "normal", lineHeight: "1.2",
+                    width: "100%", minWidth: "0", height: "28px", minHeight: "28px", padding: "2px 6px", borderRadius: "14px",
+                    fontSize: "12px", fontWeight: "500", whiteSpace: "nowrap", lineHeight: "1.2",
                     color: selected ? "#ffffff" : "#c6c3de",
                     background: selected ? "linear-gradient(120deg, #6137e3, #34216e)" : "#1b1b28",
                     border: selected ? "1px solid #8055ff" : "1px solid #333044",
@@ -329,30 +329,30 @@ function init() {
         }
         tray.render(() => {
             const seconds = Math.max(0, Math.ceil((cooldownUntil - Date.now()) / 1000));
-            const heading = (text: string) => tray.text({ text, style: { fontSize: "16px", fontWeight: "650", color: "#f4f2ff" } });
-            const grid = (items: any[], columns = 3) => tray.div({ items, style: { display: "grid", gridTemplateColumns: "repeat(" + columns + ", minmax(0, 1fr))", gap: "8px" } });
+            const heading = (text: string) => tray.text({ text, style: { fontSize: "13px", fontWeight: "650", color: "#f4f2ff", width: "auto" } });
+            const grid = (items: any[], columns = 3) => tray.div({ items, style: { display: "grid", gridTemplateColumns: "repeat(" + columns + ", minmax(0, 1fr))", gap: "6px" } });
             const items: any[] = [
-                tray.flex({ gap: 3, style: { alignItems: "center", padding: "2px 4px 8px" }, items: [
-                        tray.text({ text: "🎲", style: { fontSize: "36px" } }),
-                        tray.stack({ gap: 0, items: [
-                                tray.flex({ gap: 0, items: [tray.text({ text: "Sea", style: { fontSize: "27px", fontWeight: "750", color: "#f5f3ff" } }), tray.text({ text: "Roulette", style: { fontSize: "27px", fontWeight: "750", color: "#8b63ff" } })] }),
-                                tray.text({ text: "Find your next anime.", style: { ...muted, fontSize: "14px" } }),
-                            ] }),
-                    ] }),
+                tray.div({style:{display:"grid",gridTemplateColumns:"28px minmax(0, 1fr)",gap:"8px",alignItems:"center"},items:[
+                    tray.text({text:"🎲",style:{fontSize:"25px",width:"auto",margin:"0",lineHeight:"1"}}),
+                    tray.stack({gap:0,style:{minWidth:"0"},items:[
+                        tray.text({text:"SeaRoulette",style:{fontSize:"21px",fontWeight:"700",color:"#b79aff",whiteSpace:"nowrap",wordBreak:"normal",margin:"0",lineHeight:"1.2"}}),
+                        tray.text({text:"Find your next anime.",style:{...muted,whiteSpace:"nowrap",wordBreak:"normal",margin:"0"}}),
+                    ]}),
+                ]}),
                 tray.button({ label: generating ? "Finding an anime…" : seconds ? "Generate in " + seconds + "s" : "🎲 Generate", onClick: "generate", intent: "primary", size: "lg", disabled: generating || seconds > 0, loading: generating, style: {
-                        width: "100%", height: "58px", borderRadius: "16px", fontSize: "22px", fontWeight: "650",
+                        width: "100%", height: "40px", minHeight: "40px", borderRadius: "12px", fontSize: "17px", fontWeight: "650",
                         background: "linear-gradient(115deg, #8056fa, #4923d5)", border: "1px solid #9470ff", color: "#ffffff", opacity: generating || seconds > 0 ? "0.5" : "1",
                     } }),
                 tray.text({ text: seconds ? "◷  " + seconds + "s until the next generate" : "◷  5s cooldown after each generate", style: { ...muted, textAlign: "center" } }),
                 ...(lastPick ? [tray.text({ text: "Last pick: " + lastPick, style: { ...muted, textAlign: "center" } })] : []),
                 card([
-                    tray.flex({ gap: 2, style: { justifyContent: "space-between", alignItems: "center" }, items: [heading("☷  Lists"), tray.text({ text: "Select multiple", style: muted })] }),
+                    tray.flex({ gap: 2, style: { justifyContent: "space-between", alignItems: "center" }, items: [heading("☷  Lists"), tray.text({ text: "Select multiple", style: { ...muted, width: "auto", whiteSpace: "nowrap" } })] }),
                     grid(LISTS.map(x => pill(x[1], settings.lists.indexOf(x[0]) >= 0, "list-" + x[0]))),
                 ]),
                 grid([
                     card([heading("✦  Dub"), tray.switch({ label: "English dub only", value: settings.dubOnly, onChange: "dub-only", size: "sm" })]),
                     card([
-                        tray.button({ label: "★  Rating Range " + (ratingOpen ? "⌃" : "⌄"), onClick: "toggle-rating", intent: "gray", size: "sm", style: { background: "transparent", border: "0", padding: "0", justifyContent: "space-between", fontSize: "15px" } }),
+                        tray.button({ label: "★  Rating Range " + (ratingOpen ? "⌃" : "⌄"), onClick: "toggle-rating", intent: "gray", size: "sm", style: { background: "transparent", border: "0", padding: "0", justifyContent: "space-between", fontSize: "12px" } }),
                         tray.text({ text: settings.minRating + " – " + settings.maxRating, style: { ...muted, fontSize: "15px" } }),
                         ...(ratingOpen ? [tray.stack({ gap: 2, items: [
                                     tray.input({ label: "Minimum rating", value: String(settings.minRating), placeholder: "0", onChange: "min-rating", size: "sm" }),
@@ -362,21 +362,21 @@ function init() {
                 ], 2),
                 card([
                     tray.flex({ gap: 2, style: { alignItems: "center", justifyContent: "space-between" }, items: [
-                            tray.button({ label: "◇  Genres " + (genresOpen ? "⌃" : "⌄"), onClick: "toggle-genres", intent: "gray", size: "sm", style: { background: "transparent", border: "0", padding: "0", fontSize: "16px", fontWeight: "650" } }),
-                            tray.flex({ gap: 1, items: [pill("ANY", settings.genreMode === "ANY", "genre-mode-any"), pill("ALL", settings.genreMode === "ALL", "genre-mode-all")] }),
+                            tray.button({ label: "◇  Genres " + (genresOpen ? "⌃" : "⌄"), onClick: "toggle-genres", intent: "gray", size: "sm", style: { background: "transparent", border: "0", padding: "0", fontSize: "13px", fontWeight: "650" } }),
+                            tray.flex({gap:1,style:{flexShrink:"0"},items:["ANY","ALL"].map(mode=>tray.button({label:mode,onClick:mode==="ANY"?"genre-mode-any":"genre-mode-all",intent:"gray",size:"xs",style:{height:"25px",minHeight:"25px",width:"44px",padding:"2px 6px",borderRadius:"12px",fontSize:"11px",whiteSpace:"nowrap",background:settings.genreMode===mode?"#5931cc":"#1b1b28",border:"1px solid #403453",color:"#eeeaff"}}))}),
                         ] }),
-                    ...(genresOpen ? [grid(GENRES.map(g => pill(g, settings.genres.indexOf(g) >= 0, "genre-" + g)))] : [tray.text({ text: settings.genres.length ? settings.genres.join(" · ") : "All genres", style: muted })]),
+                    ...(genresOpen ? [grid(GENRES.map(g => pill(g, settings.genres.indexOf(g) >= 0, "genre-" + g)))] : [tray.text({ text: settings.genres.length ? settings.genres.join(" · ") : "All genres", style: { ...muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", wordBreak: "normal" } })]),
                 ]),
                 card([
-                    tray.button({ label: "☷  Advanced (Optional) " + (advancedOpen ? "⌃" : "⌄"), onClick: "toggle-advanced", intent: "gray", size: "sm", style: { background: "transparent", border: "0", padding: "0", justifyContent: "space-between", fontSize: "14px" } }),
+                    tray.button({ label: "☷  Advanced (Optional) " + (advancedOpen ? "⌃" : "⌄"), onClick: "toggle-advanced", intent: "gray", size: "sm", style: { background: "transparent", border: "0", padding: "0", justifyContent: "space-between", fontSize: "12px" } }),
                     ...(advancedOpen ? [
                         tray.button({ label: "Refresh roulette pool", onClick: "refresh-pool", size: "sm", intent: "gray", disabled: generating }),
                         ...(settings.lists.indexOf("OUTSIDE") >= 0 ? [tray.text({ text: "Outside library uses 50-title batches by popularity. Refresh loads the next batch.", style: muted })] : []),
-                        tray.text({ text: "SeaRoulette 0.1.11", style: muted }),
+                        tray.text({ text: "SeaRoulette 0.1.12", style: muted }),
                     ] : []),
                 ]),
             ];
-            return tray.stack({ items, gap: 4, style: { background: "#0d0d14", color: "#eeeaff", padding: "16px", borderRadius: "20px", border: "1px solid #282537" } });
+            return tray.stack({ items, gap: 2, style: { background: "#0d0d14", color: "#eeeaff", padding: "10px", borderRadius: "14px", border: "1px solid #282537" } });
         });
     });
 }
