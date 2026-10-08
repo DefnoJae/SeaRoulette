@@ -22,13 +22,17 @@ Add the raw manifest URL to Seanime:
 
 ## Filters and caching
 
-Selected lists combine with OR; list, rating, dub and genre categories combine with AND. Ratings use AniList's **meanScore**, from 0 to 100, with inclusive bounds. Unrated titles count as 0. Lists and Genres are always visible in three-column checkbox grids. Select multiple choices and use the ANY/ALL buttons beside Genres to set matching; no selected genres means no genre restriction.
+Selected lists combine with OR; list, rating, dub and genre categories combine with AND. Ratings use AniList's **meanScore**, from 0 to 100, with inclusive bounds. Unrated titles count as 0. Lists and Genres use three-column selectable pills with purple selected states. Genres can collapse; ANY/ALL stays in its header. No selected genres means no genre restriction. Dub and Rating Range sit side by side; click Rating Range to expose the minimum and maximum controls. Advanced starts collapsed and contains Refresh roulette pool, discovery details, and the installed version.
 
 English Dub Only matches the library's **MAL IDs** against the maintained [MAL-Dubs catalog](https://github.com/MAL-Dubs/MAL-Dubs/blob/main/data/dubInfo.json). Recorded full and partial English dubs qualify; this is not a guarantee that every episode is dubbed or available on a particular service. Titles absent from the catalog or without a MAL ID are excluded. Titles/language metadata are never used to guess dub availability. The catalog is refreshed at most daily and persists across restarts. If the source is unavailable, a saved catalog up to seven days old can be used; without valid evidence generation stops.
 
 Dub catalog data is provided by MAL-Dubs under its [AGPL-3.0 license](https://github.com/MAL-Dubs/MAL-Dubs/blob/main/LICENSE). SeaRoulette downloads it directly from the upstream URL; no catalog snapshot or upstream script is distributed in this repository.
 
 The pool and collection remain cached for the current plugin session. **Refresh roulette pool** fetches the collection again and restarts the selection cycle while preserving the valid dub catalog. Refresh is limited to once per minute. Changing filters also restarts the cycle. Settings persist across plugin restarts; the no-repeat cycle is session-only. Picks are uniformly random among remaining eligible titles, with no taste or search metadata requests.
+
+## 0.1.11 — Dark card and pill redesign
+
+Rebuilt the tray around the supplied visual reference using supported Seanime containers, buttons, text, inputs, and a native switch. Compact header, prominent purple gradient Generate action, rounded dark cards, three-column list and genre pills, side-by-side Dub and collapsible Rating Range, collapsible Genres, and a collapsed Advanced section. Selected pills display a check mark as well as purple styling. No dropdowns, taste feature, or genre search. All selection, filtering, caching, discovery, navigation, cooldown, and no-repeat logic is preserved. The dice header uses the system emoji because the repository has no logo asset. Exact icon and control appearance depends on Seanime and the system font.
 
 ## 0.1.10 — Avoid native async continuation panic
 

@@ -11,10 +11,10 @@ const schemas = {
     div: {items:'array'},
     stack: { items: 'array', gap: 'number' }, flex: { items: 'array', gap: 'number', direction: 'string' },
     text: { text: 'string' }, button: { label: 'string', onClick: 'string', intent: 'string', disabled: 'boolean', loading: 'boolean', size: 'string' },
-    input: { label: 'string', value: 'string', placeholder: 'string', onChange: 'string', fieldRef: 'object' },
+    input: { label: 'string', value: 'string', placeholder: 'string', onChange: 'string', fieldRef: 'object', size: 'string' },
     select: { label: 'string', value: 'string', onChange: 'string', options: 'array' },
     checkbox: { label: 'string', value: 'boolean', onChange: 'string', size: 'string' },
-    switch: { label: 'string', value: 'boolean', onChange: 'string' }, popover: { trigger: 'component', items: 'array' },
+    switch: { label: 'string', value: 'boolean', onChange: 'string', size: 'string' }, popover: { trigger: 'component', items: 'array' },
     dropdownMenu:{trigger:'component',items:'array',className:'string'},
     dropdownMenuItem:{item:'component',onClick:'string'},dropdownMenuSeparator:{},
 };
@@ -211,6 +211,7 @@ test('saved empty lists persist, invalid ratings are ignored, inverted ranges ar
     assert.equal(app.navigation.length, 0);
     await app.handlers['max-rating']({ value: '100' });
     const restored = boot({ settings: app.storage.settings });
+    await restored.handlers['toggle-rating']();
     assert.equal(nodes(restored.tree).find(n => n.props.onChange === 'min-rating').props.value, '90');
 });
 test('refresh forces a fresh collection and resets the current cycle', async () => {
@@ -296,4 +297,22 @@ test('delayed discovery and dub fetches complete, and rejection releases the Gen
  req=await waitForRequest();assert.ok(req.url.includes('dubInfo.json'));
  req.resolve({ok:true,status:200,json:()=>({dubbed:[20],incomplete:[]})});
  await app.settle(spin);assert.equal(app.navigation[0].params.id,'20');
+});
+test('redesigned tray sections expand safely and pills support multiple selections',async()=>{
+ const app=boot();
+ assert.equal(nodes(app.tree).some(n=>n.props.onChange==='min-rating'),false);
+ assert.equal(nodes(app.tree).some(n=>n.props.onClick==='refresh-pool'),false);
+ await app.handlers['toggle-rating']();await app.handlers['toggle-advanced']();
+ assert.ok(nodes(app.tree).some(n=>n.props.onChange==='min-rating'));
+ assert.ok(nodes(app.tree).some(n=>n.props.onClick==='refresh-pool'));
+ await app.handlers['list-PAUSED']();await app.handlers['list-COMPLETED']();
+ assert.deepEqual(app.storage.settings.lists,['PLANNING','PAUSED','COMPLETED']);
+ await app.handlers['genre-Comedy']();await app.handlers['genre-Romance']();
+ assert.deepEqual(app.storage.settings.genres,['Comedy','Romance']);
+ await app.handlers['genre-mode-all']();assert.equal(app.storage.settings.genreMode,'ALL');
+ await app.handlers['toggle-genres']();assert.equal(nodes(app.tree).some(n=>n.props.onClick==='genre-Comedy'),false);
+ await app.handlers['toggle-genres']();assert.ok(nodes(app.tree).find(n=>n.props.onClick==='genre-Comedy').props.label.startsWith('✓'));
+ await app.handlers['toggle-rating']();await app.handlers['toggle-advanced']();
+ assert.equal(nodes(app.tree).some(n=>n.props.onClick==='refresh-pool'),false);
+ assert.equal(nodes(app.tree).some(n=>n.type==='checkbox'||n.type==='dropdownMenu'),false);
 });
