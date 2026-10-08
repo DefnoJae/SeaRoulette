@@ -8,12 +8,12 @@ SeaRoulette is a Seanime plugin that turns your AniList library into a configura
 - Optional English-dub-only filtering.
 - Minimum and maximum AniList rating filters.
 - Multi-select genres with **ANY** or **ALL** matching.
-- **Taste Filter:** choose 1–5 anime you like. SeaRoulette weights candidates using genre similarity and AniList recommendations.
+- **Taste Filter:** choose 1–5 anime you like. SeaRoulette weights candidates using genre similarity, shared tags and AniList recommendations.
 - Every spin immediately opens the selected anime's Seanime page.
 - Five-second cooldown between spins.
 - No repeats until the eligible pool is exhausted.
 - Filter settings persist between sessions.
-- Cached eligible pool avoids unnecessary AniList collection requests.
+- Cached collection, eligible pool (including empty results), and taste metadata avoid repeated AniList requests during rerolls.
 
 ## Install
 
@@ -23,4 +23,28 @@ Add the raw manifest URL to Seanime:
 
 ## Taste Filter
 
-Taste mode is not a hard genre clone. Your selected lists, dub preference, rating range and genre filters first determine the eligible pool. The 1–5 taste anime then influence which eligible title is more likely to be selected. Shared genres increase similarity, and direct AniList recommendations receive a stronger weight.
+Taste mode is not a hard genre clone. Your selected lists, dub preference, rating range and genre filters first determine the eligible pool. The 1–5 taste anime then influence which eligible title is more likely to be selected. Shared genres and rank-weighted tags increase similarity, and direct AniList recommendations receive a stronger weight. Every eligible title retains a nonzero chance. Enabling taste mode requires at least one seed. Changing seeds preserves the current no-repeat cycle.
+
+## Filters and caching
+
+Selected lists combine with OR; list, rating, dub and genre categories combine with AND. Ratings use AniList's **meanScore**, from 0 to 100, with inclusive bounds. Unrated titles count as 0. Genre matching can require any or all selected genres; no selected genres means no genre restriction. Open the Genres button to edit its compact popover.
+
+English Dub Only checks actual **English voice-actor credits on that anime's AniList character edges**, paging through characters until evidence is found or all pages are exhausted. It never infers a dub from English titles or country metadata. AniList's cast records can be incomplete: a dubbed title without recorded English credits is excluded. This verifies recorded dub production, not availability on a particular streaming service. Positive and negative checks persist for seven days; failed requests are never cached as negatives.
+
+The eligible pool, collection and taste metadata remain cached for the current plugin session. Taste tags are fetched in batches of up to 50 titles; recommendation connections are fetched only for the selected seeds (the top 25 recommendations each). Rerolls reuse these records. First-time dub checks may take longer for large libraries. **Refresh roulette pool** fetches the collection again, clears metadata/dub caches and restarts the selection cycle. Changing normal filters also restarts the cycle. Settings persist across plugin restarts; the no-repeat cycle is session-only.
+
+## 0.1.1 — Seanime 3.10.3 compatibility
+
+Fixed `Component type "" not found`: the tray render callback must **return** its root component. The tray now uses explicit object builder arguments, a returned `stack`, and conditional array spreads so no null/undefined component enters `stack` or `flex`. Wrapped rows and native controls keep Generate prominent.
+
+Validated against [Seanime v3.10.3 source](https://github.com/5rahim/seanime/tree/v3.10.3/internal/plugin/ui), its [plugin types](https://github.com/5rahim/seanime/blob/v3.10.3/internal/extension_repo/goja_plugin_types/plugin.d.ts), frontend registry, and the [official working plugin example](https://seanime.gitbook.io/seanime-extensions/plugins/example). The source supports both shorthand and object arguments; the missing render return was the root error. Cooldown now uses `ctx.setTimeout` and navigation uses `ctx.screen.navigateTo("/entry", {id})`. AniList custom queries return unwrapped GraphQL data. Search uses a custom query to avoid the v3.10.3 `listAnime` runtime/type mismatch (the runtime includes an extra tags argument).
+
+## Development validation
+
+Run the contract and behavior tests with Node.js 24+:
+
+```sh
+node --test tests/runtime.test.cjs
+```
+
+These tests use a strict mock of Seanime's v3.10.3 builders/events and AniList responses. They cover valid render trees, navigation, the five-second cooldown, no repeats, filter logic, dub pagination/cache/error handling, seed limits, taste weights, and persistence. Type-check `code.ts` alongside Seanime v3.10.3's `plugin.d.ts` and `app.d.ts` using `tsc --noEmit --skipLibCheck --target es2020`. A live Seanime UI smoke test is still needed after updating the installed plugin.
