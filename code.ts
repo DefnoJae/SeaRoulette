@@ -382,9 +382,11 @@ function init() {
         ctx.registerEventHandler("taste-query", (e: any) => { tasteQuery = String(e?.value ?? e ?? ""); });
         ctx.registerEventHandler("taste-search", searchTaste);
         for (const item of LISTS)
-            ctx.registerEventHandler("list-" + item[0], (e: any) => setArrayValue(settings.lists, item[0], !!(e?.value ?? e)));
+            ctx.registerEventHandler("list-" + item[0], (e: any) => setArrayValue(settings.lists, item[0], typeof e?.value === "boolean" ? e.value : settings.lists.indexOf(item[0]) < 0));
         for (const g of GENRES)
-            ctx.registerEventHandler("genre-" + g, (e: any) => setArrayValue(settings.genres, g, !!(e?.value ?? e)));
+            ctx.registerEventHandler("genre-" + g, (e: any) => setArrayValue(settings.genres, g, typeof e?.value === "boolean" ? e.value : settings.genres.indexOf(g) < 0));
+        ctx.registerEventHandler("genre-mode-any", () => {settings.genreMode="ANY";invalidate();});
+        ctx.registerEventHandler("genre-mode-all", () => {settings.genreMode="ALL";invalidate();});
         ctx.registerEventHandler("dub-only", (e: any) => { settings.dubOnly = !!(e?.value ?? e); invalidate(); });
         ctx.registerEventHandler("taste-enabled", (e: any) => { settings.tasteEnabled = !!e?.value; invalidate(false); });
         for (let i = 0; i < 8; i++)
@@ -410,12 +412,8 @@ function init() {
             const seconds = Math.max(0, Math.ceil((cooldownUntil - Date.now()) / 1000));
             const items: any[] = [
                 tray.text({
-                    text: "SeaRoulette 0.1.5",
+                    text: "SeaRoulette 0.1.6",
                     style: { fontSize: "20px", fontWeight: "700" }
-                }),
-                tray.text({
-                    text: "Set your pool once, then spin straight to an anime page.",
-                    style: { opacity: "0.72" }
                 }),
                 tray.button({
                     label: generating ? "Finding an anime…" : seconds ? "Spin again in " + seconds + "s" : "🎲 Generate",
@@ -425,18 +423,20 @@ function init() {
                         text: "Last pick: " + lastPick,
                         style: { opacity: "0.7", fontSize: "12px" }
                     })] : []),
-                tray.text({
-                    text: "Lists",
-                    style: { fontWeight: "700", marginTop: "8px" }
+                tray.dropdownMenu({
+                    trigger: tray.button({label:"Lists · " + (settings.lists.length === 1 ? LISTS.find(x=>x[0]===settings.lists[0])?.[1] : settings.lists.length + " selected") + " ▾",size:"sm"}),
+                    items: LISTS.map(x=>tray.dropdownMenuItem({item:tray.text({text:(settings.lists.indexOf(x[0])>=0?"✓ ":"＋ ")+x[1]}),onClick:"list-"+x[0]})),
                 }),
-                tray.flex({
-                    items: LISTS.map(x => tray.checkbox({
-                        label: x[1],
-                        value: settings.lists.indexOf(x[0]) >= 0, onChange: "list-" + x[0], size: "sm"
-                    })),
-                    gap: 2, style: { flexWrap: "wrap" }
+                tray.dropdownMenu({
+                    trigger:tray.button({label:"Genres · " + (settings.genres.length ? settings.genres.length + " selected · " + settings.genreMode : "Any") + " ▾",size:"sm"}),
+                    className:"max-h-[300px] overflow-y-auto",
+                    items:[
+                        ...GENRES.map(g=>tray.dropdownMenuItem({item:tray.text({text:(settings.genres.indexOf(g)>=0?"✓ ":"＋ ")+g}),onClick:"genre-"+g})),
+                        tray.dropdownMenuSeparator({}),
+                        tray.dropdownMenuItem({item:tray.text({text:(settings.genreMode==="ANY"?"✓ ":"")+"Match ANY selected genre"}),onClick:"genre-mode-any"}),
+                        tray.dropdownMenuItem({item:tray.text({text:(settings.genreMode==="ALL"?"✓ ":"")+"Match ALL selected genres"}),onClick:"genre-mode-all"}),
+                    ],
                 }),
-                tray.text({ text: "Filters", style: { fontWeight: "700" } }),
                 tray.switch({
                     label: "English dub only",
                     value: settings.dubOnly, onChange: "dub-only"
@@ -454,40 +454,22 @@ function init() {
                     ],
                     gap: 2
                 }),
-                tray.popover({
-                    trigger: tray.button({ label: settings.genres.length ? "Genres: " + settings.genres.join(" · ") : "Genres: Any", size: "sm" }),
-                    items: [tray.select({
-                            label: "Genre matching",
-                            value: settings.genreMode, onChange: "genre-mode", options: [{ label: "Match any selected genre", value: "ANY" }, { label: "Match all selected genres", value: "ALL" }]
-                        }),
-                        tray.flex({
-                            items: GENRES.map(g => tray.checkbox({
-                                label: g,
-                                value: settings.genres.indexOf(g) >= 0, onChange: "genre-" + g, size: "sm"
-                            })),
-                            gap: 2, style: { flexWrap: "wrap" }
-                        })],
-                }),
-                tray.text({
-                    text: "Taste filter",
-                    style: { fontWeight: "700", marginTop: "10px" }
-                }),
                 tray.switch({
-                    label: "Recommend based on anime I like",
+                    label: "Taste recommendations",
                     value: settings.tasteEnabled, onChange: "taste-enabled"
                 }),
-                tray.text({
-                    text: "Choose 1–5 anime. Shared genres, tags and AniList recommendations weight eligible picks.",
+                ...(settings.tasteEnabled ? [tray.text({
+                    text: "Choose 1–5 anime you like.",
                     style: { opacity: "0.72", fontSize: "12px" }
-                }),
-                ...(settings.tasteSeeds.length ? [tray.flex({
+                })] : []),
+                ...(settings.tasteEnabled && settings.tasteSeeds.length ? [tray.flex({
                         items: settings.tasteSeeds.map((s, i) => tray.button({
                             label: "× " + s.title,
                             onClick: "remove-seed-" + i, size: "xs"
                         })),
                         gap: 1, style: { flexWrap: "wrap" }
                     })] : []),
-                ...(settings.tasteSeeds.length < 5 ? [tray.flex({
+                ...(settings.tasteEnabled && settings.tasteSeeds.length < 5 ? [tray.flex({
                         items: [
                             tray.input({
                                 label: "Add anime you like",
@@ -500,7 +482,7 @@ function init() {
                         ],
                         gap: 2
                     })] : []),
-                ...(tasteResults.length ? [tray.stack({
+                ...(settings.tasteEnabled && tasteResults.length ? [tray.stack({
                         items: tasteResults.slice(0, 8).map((m, i) => tray.button({
                             label: titleOf(m),
                             onClick: "taste-result-" + i, size: "sm"
@@ -510,10 +492,6 @@ function init() {
                 tray.button({
                     label: "Refresh roulette pool",
                     onClick: "refresh-pool", size: "xs", disabled: generating || searching
-                }),
-                tray.text({
-                    text: "Each spin opens the anime immediately. Picks do not repeat until the current eligible pool is exhausted.",
-                    style: { opacity: "0.6", fontSize: "11px" }
                 }),
             ];
             return tray.stack({ items, gap: 3 });

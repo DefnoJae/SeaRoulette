@@ -14,6 +14,8 @@ const schemas = {
     select: { label: 'string', value: 'string', onChange: 'string', options: 'array' },
     checkbox: { label: 'string', value: 'boolean', onChange: 'string', size: 'string' },
     switch: { label: 'string', value: 'boolean', onChange: 'string' }, popover: { trigger: 'component', items: 'array' },
+    dropdownMenu:{trigger:'component',items:'array',className:'string'},
+    dropdownMenuItem:{item:'component',onClick:'string'},dropdownMenuSeparator:{},
 };
 const media = (id, genres = ['Comedy'], meanScore = 80) => ({ id, idMal: id, genres, meanScore, title: { romaji: 'Anime ' + id } });
 function boot(options = {}) {
@@ -123,7 +125,7 @@ function boot(options = {}) {
         advance,
         get tree() { return tree; } };
 }
-function nodes(root) { return [root, ...(root.props.items || []).flatMap(nodes), ...(root.props.trigger ? nodes(root.props.trigger) : [])]; }
+function nodes(root) { return [root, ...(root.props.items || []).flatMap(nodes), ...(root.props.trigger ? nodes(root.props.trigger) : []), ...(root.props.item ? nodes(root.props.item) : [])]; }
 function generateButton(app) { return nodes(app.tree).find(n => n.props.onClick === 'generate'); }
 test('500-title dub pool uses one external catalog download and zero AniList metadata requests',async()=>{
     const app=boot({settings:{dubOnly:true},entries:Array.from({length:500},(_,i)=>media(i+1)),catalog:{dubbed:[400],incomplete:[]}});
