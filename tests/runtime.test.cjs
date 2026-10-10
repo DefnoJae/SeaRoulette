@@ -250,54 +250,6 @@ test('refresh preserves expensive caches and repeated refresh clicks do not send
     assert.deepEqual(app.collections, [true]);
     assert.equal(app.requests.length, 0);
 });
-test('outside discovery excludes every library status, applies filters and caches rerolls',async()=>{
- const app=boot({settings:{lists:['OUTSIDE'],dubOnly:true,minRating:75,genres:['Comedy']},
- collection:{MediaListCollection:{lists:[{status:'COMPLETED',entries:[{media:media(10)}]}]}},
- catalog:{dubbed:[10,20,21,22,23],incomplete:[]},
- query:()=>({Page:{pageInfo:{hasNextPage:true},media:[media(10),media(20),media(21),media(22,['Action']),media(23,['Comedy'],60)]}})});
- await app.handlers.generate();app.advance(5000);await app.handlers.generate();
- assert.deepEqual(app.navigation.map(n=>n.params.id),['20','21']);assert.equal(app.requests.length,1);
- assert.equal(app.catalogFetches.length,1);
- await app.handlers['refresh-pool']();app.advance(5000);await app.handlers.generate();
- assert.equal(app.requests.length,2);assert.equal(app.requests[1].variables.page,2);
-});
-test('outside and selected library statuses combine with OR and persist',async()=>{
- const app=boot({settings:{lists:['PLANNING']},query:()=>({Page:{pageInfo:{hasNextPage:false},media:[media(1),media(20)]}})});
- await app.handlers['list-OUTSIDE']({value:true});
- assert.ok(app.storage.settings.lists.includes('OUTSIDE'));
- for(let i=0;i<4;i++){await app.handlers.generate();app.advance(5000);}
- assert.deepEqual(app.navigation.map(n=>n.params.id),['1','2','3','20']);assert.equal(app.requests.length,1);
-});
-test('outside 429 never retries automatically and blocks clicks until Retry-After',async()=>{
- const app=boot({settings:{lists:['OUTSIDE']},fetch:()=>({ok:false,status:429,headers:{'Retry-After':'60'}})});
- await app.handlers.generate();assert.equal(app.requests.length,1);
- app.advance(59000);await app.handlers.generate();assert.equal(app.requests.length,1);
- app.advance(1000);assert.equal(app.requests.length,1);await app.handlers.generate();assert.equal(app.requests.length,2);
- assert.equal(app.navigation.length,0);
-});
-test('empty discovery makes one request and waits for manual refresh; stale work cannot navigate',async()=>{
- const app=boot({settings:{lists:['OUTSIDE']},query:()=>({Page:{pageInfo:{hasNextPage:false},media:[]}})});
- await app.handlers.generate();app.advance(60000);await app.handlers.generate();assert.equal(app.requests.length,1);
- await app.handlers['refresh-pool']();await app.handlers.generate();assert.equal(app.requests[1].variables.page,1);
- let release;
- const stale=boot({settings:{lists:['OUTSIDE']},fetch:()=>new Promise(r=>release=r)});
- const pending=stale.rawHandlers.generate();for(let i=0;i<20 && !release;i++)await Promise.resolve();
- await stale.handlers['list-OUTSIDE']({value:false});
- release({ok:true,status:200,json:()=>({data:{Page:{pageInfo:{hasNextPage:false},media:[media(20)]}}})});
- await stale.settle(pending);assert.equal(stale.navigation.length,0);
-});
-test('delayed discovery and dub fetches complete, and rejection releases the Generate guard',async()=>{
- const pending=[];
- const app=boot({settings:{lists:['OUTSIDE'],dubOnly:true},fetch:(url)=>new Promise((resolve,reject)=>pending.push({url,resolve,reject}))});
- async function waitForRequest(){for(let i=0;i<30 && !pending.length;i++)await Promise.resolve();assert.ok(pending.length);return pending.shift();}
- let spin=app.rawHandlers.generate();let req=await waitForRequest();
- req.reject(Error('connection closed'));await app.settle(spin);assert.equal(generateButton(app).props.disabled,false);
- app.advance(2500);spin=app.rawHandlers.generate();req=await waitForRequest();
- req.resolve({ok:true,status:200,json:()=>({data:{Page:{pageInfo:{hasNextPage:false},media:[media(20)]}}})});
- req=await waitForRequest();assert.ok(req.url.includes('dubInfo.json'));
- req.resolve({ok:true,status:200,json:()=>({dubbed:[20],incomplete:[]})});
- await app.settle(spin);assert.equal(app.navigation[0].params.id,'20');
-});
 test('redesigned tray sections expand safely and pills support multiple selections',async()=>{
  const app=boot();
  assert.equal(nodes(app.tree).some(n=>n.props.onChange==='min-rating'),false);
@@ -316,7 +268,11 @@ test('redesigned tray sections expand safely and pills support multiple selectio
  assert.equal(nodes(app.tree).some(n=>n.props.onClick==='refresh-pool'),false);
  assert.equal(nodes(app.tree).some(n=>n.type==='checkbox'||n.type==='dropdownMenu'),false);
 });
-test('outside excludes titles from custom lists without a status',async()=>{
- const app=boot({settings:{lists:['OUTSIDE']},collection:{MediaListCollection:{lists:[{name:'Custom',entries:[{media:media(20)}]}]}},query:()=>({Page:{pageInfo:{hasNextPage:false},media:[media(20),media(21)]}})});
- await app.handlers.generate();assert.equal(app.navigation[0].params.id,'21');
+test('removed outside-only settings migrate to Planning and mixed selections retain lists',async()=>{
+ for(const [oldLists,expected] of [[['OUTSIDE'],['PLANNING']],[['OUTSIDE','PAUSED'],['PAUSED']]]){
+ const app=boot({settings:{lists:oldLists}});await app.handlers['min-rating']({value:'0'});
+ assert.deepEqual(app.storage.settings.lists,expected);
+ assert.equal(Object.keys(app.handlers).includes('list-OUTSIDE'),false);
+ assert.equal(app.requests.length,0);
+ }
 });

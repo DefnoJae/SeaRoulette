@@ -1,11 +1,11 @@
 {
   "id": "searoulette",
   "name": "SeaRoulette",
-  "version": "0.1.16",
+  "version": "0.1.17",
   "manifestURI": "https://raw.githubusercontent.com/DefnoJae/SeaRoulette/main/Manifest.json",
   "language": "typescript",
   "type": "plugin",
-  "description": "Pick anime from your AniList library or discover titles outside it, with dub, rating and genre filters.",
+  "description": "Randomly pick anime from your AniList lists using dub, rating and genre filters.",
   "author": "DefnoJae",
   "website": "https://github.com/DefnoJae/SeaRoulette",
   "lang": "en",
@@ -21,8 +21,7 @@
       "allow": {
         "networkAccess": {
           "allowedDomains": [
-            "raw.githubusercontent.com",
-            "graphql.anilist.co"
+            "raw.githubusercontent.com"
           ]
         }
       }

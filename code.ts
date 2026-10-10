@@ -2,7 +2,7 @@ function init() {
     $ui.register((ctx) => {
         const LISTS = [
             ["CURRENT", "Watching"], ["PLANNING", "Planning"], ["PAUSED", "Paused"],
-            ["COMPLETED", "Completed"], ["DROPPED", "Dropped"], ["REPEATING", "Repeating"], ["OUTSIDE", "Outside library"],
+            ["COMPLETED", "Completed"], ["DROPPED", "Dropped"], ["REPEATING", "Repeating"],
         ];
         const GENRES = ["Action", "Adventure", "Comedy", "Drama", "Ecchi", "Fantasy", "Horror", "Mahou Shoujo", "Mecha", "Music", "Mystery", "Psychological", "Romance", "Sci-Fi", "Slice of Life", "Sports", "Supernatural", "Thriller"];
         type Settings = {
@@ -23,11 +23,6 @@ function init() {
         let generating = false;
         let revision = 0;
         let lastRefreshAt = -Infinity;
-        let discovery: any[] | null = null;
-        let discoveryPage = 1;
-        let discoveryHasNext = true;
-        let blockedUntil = 0;
-        let lastDiscoveryAt = -Infinity;
         const DUB_URL = "https://raw.githubusercontent.com/MAL-Dubs/MAL-Dubs/main/data/dubInfo.json";
         let dubCatalog: any = $storage.get("dubCatalog");
         function validCatalog(value: any): boolean {
@@ -61,7 +56,7 @@ function init() {
         function loadSettings(): Settings {
             const saved = $storage.get("settings") as any;
             return {
-                lists: Array.isArray(saved?.lists) ? saved.lists.filter((s: any) => LISTS.some(x => x[0] === s)) : ["PLANNING"],
+                lists: Array.isArray(saved?.lists) ? saved.lists.some((s: any) => LISTS.some(x => x[0] === s)) ? saved.lists.filter((s: any) => LISTS.some(x => x[0] === s)) : saved.lists.indexOf("OUTSIDE") >= 0 ? ["PLANNING"] : [] : ["PLANNING"],
                 dubOnly: !!saved?.dubOnly,
                 minRating: ratingValue(saved?.minRating, 0),
                 maxRating: ratingValue(saved?.maxRating, 100),
@@ -137,63 +132,11 @@ function init() {
             const malId = Number(media.idMal);
             return malId > 0 && (dubCatalog.dubbed.indexOf(malId) >= 0 || dubCatalog.incomplete.indexOf(malId) >= 0);
         }
-        function loadDiscovery(expectedRevision: number): Promise<void> {
-            if (discovery !== null)
-                return Promise.resolve();
-            if (Date.now() < blockedUntil)
-                return Promise.reject(new Error("AniList rate limited. Wait " + Math.ceil((blockedUntil - Date.now()) / 1000) + "s, then click Generate. No automatic retry."));
-            const delay = Math.max(0, lastDiscoveryAt + 2500 - Date.now());
-            const ready = delay ? new Promise<void>(resolve => ctx.setTimeout(resolve, delay)) : Promise.resolve();
-            return ready.then(() => {
-                if (expectedRevision !== revision)
-                    return;
-                lastDiscoveryAt = Date.now();
-                return ctx.fetch("https://graphql.anilist.co", {
-                    method: "POST", headers: { "Content-Type": "application/json" }, timeout: 15, noCloudflareBypass: true,
-                    body: JSON.stringify({ query: "query($page:Int!){Page(page:$page,perPage:50){pageInfo{hasNextPage} media(type:ANIME,sort:POPULARITY_DESC){id idMal genres meanScore title{userPreferred english romaji}}}}", variables: { page: discoveryPage } }),
-                });
-            }).then(response => {
-                if (!response || expectedRevision !== revision)
-                    return;
-                if (response.status === 429) {
-                    const key = Object.keys(response.headers || {}).find(k => k.toLowerCase() === "retry-after");
-                    const seconds = Number(key ? response.headers[key] : 60);
-                    blockedUntil = Date.now() + (Number.isFinite(seconds) ? Math.max(1, seconds) : 60) * 1000;
-                    throw new Error("AniList rate limited. No automatic retry; wait before clicking Generate again.");
-                }
-                if (!response.ok)
-                    throw new Error("AniList HTTP " + response.status);
-                const result = response.json();
-                if (result?.errors?.length)
-                    throw new Error(String(result.errors[0].message));
-                const page = result?.data?.Page;
-                if (!Array.isArray(page?.media) || typeof page?.pageInfo?.hasNextPage !== "boolean")
-                    throw new Error("Invalid discovery response");
-                if (expectedRevision !== revision)
-                    return;
-                discovery = page.media;
-                discoveryHasNext = page.pageInfo.hasNextPage;
-            });
-        }
         function buildPool(): any[] {
             const key = JSON.stringify([settings.lists, settings.dubOnly, settings.minRating, settings.maxRating, settings.genres, settings.genreMode]);
             if (key === cacheKey)
                 return cachedPool;
             let pool = flattenCollection();
-            if (settings.lists.indexOf("OUTSIDE") >= 0) {
-                const libraryIds: Record<string, boolean> = {};
-                for (const list of collectionCache.MediaListCollection.lists)
-                    for (const entry of (list?.entries || []))
-                        if (entry?.media?.id)
-                            libraryIds[String(entry.media.id)] = true;
-                const seen: Record<string, boolean> = {};
-                for (const m of discovery || []) {
-                    if (!m?.id || libraryIds[String(m.id)] || seen[String(m.id)])
-                        continue;
-                    seen[String(m.id)] = true;
-                    pool.push(m);
-                }
-            }
             pool = pool.filter(passesBasic);
             cachedPool = pool;
             cacheKey = key;
@@ -230,10 +173,6 @@ function init() {
             const generationRevision = revision;
             return Promise.resolve().then(() => {
                 flattenCollection();
-                if (settings.lists.indexOf("OUTSIDE") >= 0) {
-                    stage = "Outside-library discovery";
-                    return loadDiscovery(generationRevision);
-                }
             }).then(() => {
                 if (generationRevision !== revision)
                     return;
@@ -248,7 +187,7 @@ function init() {
                 if (settings.dubOnly)
                     pool = pool.filter(hasEnglishDub);
                 if (!pool.length) {
-                    ctx.toast.warning(settings.lists.indexOf("OUTSIDE") >= 0 ? "SeaRoulette: no matches in this batch. Refresh roulette pool to try the next 50 titles." : "SeaRoulette: no anime matched these filters.");
+                    ctx.toast.warning("SeaRoulette: no anime matched these filters.");
                     return;
                 }
                 stage = "Anime selection";
@@ -287,10 +226,6 @@ function init() {
             lastRefreshAt = Date.now();
             try {
                 collectionCache = $anilist.getRawAnimeCollection(true);
-                if (settings.lists.indexOf("OUTSIDE") >= 0 && discovery !== null) {
-                    discoveryPage = discoveryHasNext ? discoveryPage + 1 : 1;
-                    discovery = null;
-                }
                 // Keep the valid dub catalog on refresh.
                 invalidate();
                 ctx.toast.success("SeaRoulette pool refreshed.");
@@ -371,8 +306,7 @@ function init() {
                     tray.button({ label: "☷  Advanced (Optional) " + (advancedOpen ? "⌃" : "⌄"), onClick: "toggle-advanced", intent: "gray", size: "sm", style: { background: "transparent", border: "0", padding: "0", justifyContent: "space-between", fontSize: "12px" } }),
                     ...(advancedOpen ? [
                         tray.button({ label: "Refresh roulette pool", onClick: "refresh-pool", size: "sm", intent: "gray", disabled: generating }),
-                        ...(settings.lists.indexOf("OUTSIDE") >= 0 ? [tray.text({ text: "Outside library uses 50-title batches by popularity. Refresh loads the next batch.", style: muted })] : []),
-                        tray.text({ text: "SeaRoulette 0.1.16", style: muted }),
+                        tray.text({ text: "SeaRoulette 0.1.17", style: muted }),
                     ] : []),
                 ]),
             ];
