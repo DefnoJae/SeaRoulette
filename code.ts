@@ -100,7 +100,7 @@ function init() {
         }
         function flattenCollection(): any[] {
             if (!collectionCache)
-                collectionCache = $anilist.getAnimeCollection(false);
+                collectionCache = $anilist.getRawAnimeCollection(false);
             const lists = collectionCache?.MediaListCollection?.lists;
             if (!Array.isArray(lists))
                 throw new Error("Could not read your AniList collection");
@@ -286,7 +286,7 @@ function init() {
             }
             lastRefreshAt = Date.now();
             try {
-                collectionCache = $anilist.getAnimeCollection(true);
+                collectionCache = $anilist.getRawAnimeCollection(true);
                 if (settings.lists.indexOf("OUTSIDE") >= 0 && discovery !== null) {
                     discoveryPage = discoveryHasNext ? discoveryPage + 1 : 1;
                     discovery = null;
@@ -372,7 +372,7 @@ function init() {
                     ...(advancedOpen ? [
                         tray.button({ label: "Refresh roulette pool", onClick: "refresh-pool", size: "sm", intent: "gray", disabled: generating }),
                         ...(settings.lists.indexOf("OUTSIDE") >= 0 ? [tray.text({ text: "Outside library uses 50-title batches by popularity. Refresh loads the next batch.", style: muted })] : []),
-                        tray.text({ text: "SeaRoulette 0.1.15", style: muted }),
+                        tray.text({ text: "SeaRoulette 0.1.16", style: muted }),
                     ] : []),
                 ]),
             ];

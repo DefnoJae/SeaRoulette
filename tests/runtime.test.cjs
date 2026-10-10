@@ -109,7 +109,7 @@ function boot(options = {}) {
         // Match the installed manifest: reading a token must throw. Public
         // metadata queries must never call this API.
         $database: { anilist: { getToken: () => { throw Error('permission denied'); } } },
-        $anilist: { getAnimeCollection: bypass => {
+        $anilist: { getRawAnimeCollection: bypass => {
                 collections.push(bypass);
                 if (options.collectionError)
                     throw Error(options.collectionError);
@@ -315,4 +315,8 @@ test('redesigned tray sections expand safely and pills support multiple selectio
  await app.handlers['toggle-rating']();await app.handlers['toggle-advanced']();
  assert.equal(nodes(app.tree).some(n=>n.props.onClick==='refresh-pool'),false);
  assert.equal(nodes(app.tree).some(n=>n.type==='checkbox'||n.type==='dropdownMenu'),false);
+});
+test('outside excludes titles from custom lists without a status',async()=>{
+ const app=boot({settings:{lists:['OUTSIDE']},collection:{MediaListCollection:{lists:[{name:'Custom',entries:[{media:media(20)}]}]}},query:()=>({Page:{pageInfo:{hasNextPage:false},media:[media(20),media(21)]}})});
+ await app.handlers.generate();assert.equal(app.navigation[0].params.id,'21');
 });

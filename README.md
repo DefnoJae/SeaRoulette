@@ -30,6 +30,10 @@ Dub catalog data is provided by MAL-Dubs under its [AGPL-3.0 license](https://gi
 
 The pool and collection remain cached for the current plugin session. **Refresh roulette pool** fetches the collection again and restarts the selection cycle while preserving the valid dub catalog. Refresh is limited to once per minute. Changing filters also restarts the cycle. Settings persist across plugin restarts; the no-repeat cycle is session-only. Picks are uniformly random among remaining eligible titles, with no taste or search metadata requests.
 
+## 0.1.16 — Complete-library exclusion
+
+Use Seanime's raw anime collection, which includes custom lists, when building the exclusion set. The regular collection omits custom lists and could incorrectly treat their titles as outside the library. To generate only outside titles, deselect the six standard statuses. Discovery still rerolls within the cached 50-title batch; Refresh loads the next batch. This change does not claim to resolve an unspecified runtime error.
+
 ## 0.1.15 — Community-selected icon
 
 Replaced the dice icon with the approved purple cylinder, straw-hat skull, and “WHAT’S NEXT?” artwork. Marketplace, plugin tray, and header share the supplied transparent PNG without redesigning it. A new asset URL avoids stale dice-image caches.
