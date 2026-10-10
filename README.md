@@ -30,6 +30,10 @@ Dub catalog data is provided by MAL-Dubs under its [AGPL-3.0 license](https://gi
 
 The pool and collection remain cached for the current plugin session. **Refresh roulette pool** fetches the collection again and restarts the selection cycle while preserving the valid dub catalog. Refresh is limited to once per minute. Changing filters also restarts the cycle. Settings persist across plugin restarts; the no-repeat cycle is session-only. Picks are uniformly random among remaining eligible titles, with no taste or search metadata requests.
 
+## 0.1.18 — Spinning Generate icon
+
+Generate now displays our cylinder artwork in place of the dice emoji. Each accepted click turns it once over 500ms using a CSS transition; navigation and the five-second cooldown remain unchanged. Reduced-motion settings disable the transition.
+
 ## 0.1.17 — Remove Outside Library
 
 Removed outside-library selection, batch discovery, and direct AniList network permission. Picks now come only from the six AniList statuses. Legacy outside-only settings fall back to Planning; mixed settings retain their remaining statuses. Dub, rating, genres, caching, navigation, and cooldown are preserved.

@@ -8,9 +8,10 @@ const source = stripTypeScriptTypes(fs.readFileSync(require('node:path').join(__
 // frontend registry. Returning a component from render is essential even
 // though plugin.d.ts incorrectly declares builders' return type as void.
 const schemas = {
+    css: {css:"string"},
     div: {items:'array'},
     stack: { items: 'array', gap: 'number' }, flex: { items: 'array', gap: 'number', direction: 'string' },
-    text: { text: 'string' }, button: { label: 'string', onClick: 'string', intent: 'string', disabled: 'boolean', loading: 'boolean', size: 'string' },
+    text: { text: 'string' }, button: { label: 'string', onClick: 'string', intent: 'string', disabled: 'boolean', loading: 'boolean', size: 'string', className: 'string' },
     input: { label: 'string', value: 'string', placeholder: 'string', onChange: 'string', fieldRef: 'object', size: 'string' },
     select: { label: 'string', value: 'string', onChange: 'string', options: 'array' },
     checkbox: { label: 'string', value: 'boolean', onChange: 'string', size: 'string' },
@@ -275,4 +276,11 @@ test('removed outside-only settings migrate to Planning and mixed selections ret
  assert.equal(Object.keys(app.handlers).includes('list-OUTSIDE'),false);
  assert.equal(app.requests.length,0);
  }
+});
+test('Generate icon turns once per accepted click while cooldown clicks are ignored',async()=>{
+ const app=boot();assert.equal(generateButton(app).props.label,'Generate');
+ await app.handlers.generate();assert.equal(generateButton(app).props.style['--searoulette-angle'],'360deg');
+ await app.handlers.generate();assert.equal(generateButton(app).props.style['--searoulette-angle'],'360deg');
+ app.advance(5000);await app.handlers.generate();assert.equal(generateButton(app).props.style['--searoulette-angle'],'720deg');
+ assert.equal(app.navigation.length,2);
 });
