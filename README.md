@@ -30,6 +30,10 @@ Dub catalog data is provided by MAL-Dubs under its [AGPL-3.0 license](https://gi
 
 The pool and collection remain cached for the current plugin session. **Refresh roulette pool** fetches the collection again and restarts the selection cycle while preserving the valid dub catalog. Refresh is limited to once per minute. Changing filters also restarts the cycle. Settings persist across plugin restarts; the no-repeat cycle is session-only. Picks are uniformly random among remaining eligible titles, with no taste or search metadata requests.
 
+## 0.1.15 — Community-selected icon
+
+Replaced the dice icon with the approved purple cylinder, straw-hat skull, and “WHAT’S NEXT?” artwork. Marketplace, plugin tray, and header share the supplied transparent PNG without redesigning it. A new asset URL avoids stale dice-image caches.
+
 ## 0.1.14 — Compatible PNG icon
 
 Seanime's SeaImage external-image allowlist excludes SVG, so the original icon fell back to a placeholder. Converted the vector source to a transparent 256×256 PNG and changed the manifest, tray, and header to use it. The SVG remains the editable source.

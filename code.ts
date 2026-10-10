@@ -56,7 +56,7 @@ function init() {
         const tray = ctx.newTray({
             withContent: true,
             width: "430px",
-            iconUrl: "https://raw.githubusercontent.com/DefnoJae/SeaRoulette/main/assets/icon.png",
+            iconUrl: "https://raw.githubusercontent.com/DefnoJae/SeaRoulette/main/assets/searoulette-strawhat.png",
         });
         function loadSettings(): Settings {
             const saved = $storage.get("settings") as any;
@@ -333,7 +333,7 @@ function init() {
             const grid = (items: any[], columns = 3) => tray.div({ items, style: { display: "grid", gridTemplateColumns: "repeat(" + columns + ", minmax(0, 1fr))", gap: "6px" } });
             const items: any[] = [
                 tray.div({style:{display:"grid",gridTemplateColumns:"28px minmax(0, 1fr)",gap:"8px",alignItems:"center"},items:[
-                    tray.div({items:[],style:{width:"28px",height:"28px",backgroundImage:"url(https://raw.githubusercontent.com/DefnoJae/SeaRoulette/main/assets/icon.png)",backgroundSize:"contain",backgroundRepeat:"no-repeat",backgroundPosition:"center"}}),
+                    tray.div({items:[],style:{width:"28px",height:"28px",backgroundImage:"url(https://raw.githubusercontent.com/DefnoJae/SeaRoulette/main/assets/searoulette-strawhat.png)",backgroundSize:"contain",backgroundRepeat:"no-repeat",backgroundPosition:"center"}}),
                     tray.stack({gap:0,style:{minWidth:"0"},items:[
                         tray.text({text:"SeaRoulette",style:{fontSize:"21px",fontWeight:"700",color:"#b79aff",whiteSpace:"nowrap",wordBreak:"normal",margin:"0",lineHeight:"1.2"}}),
                         tray.text({text:"Find your next anime.",style:{...muted,whiteSpace:"nowrap",wordBreak:"normal",margin:"0"}}),
@@ -372,7 +372,7 @@ function init() {
                     ...(advancedOpen ? [
                         tray.button({ label: "Refresh roulette pool", onClick: "refresh-pool", size: "sm", intent: "gray", disabled: generating }),
                         ...(settings.lists.indexOf("OUTSIDE") >= 0 ? [tray.text({ text: "Outside library uses 50-title batches by popularity. Refresh loads the next batch.", style: muted })] : []),
-                        tray.text({ text: "SeaRoulette 0.1.14", style: muted }),
+                        tray.text({ text: "SeaRoulette 0.1.15", style: muted }),
                     ] : []),
                 ]),
             ];
