@@ -30,6 +30,10 @@ Dub catalog data is provided by MAL-Dubs under its [AGPL-3.0 license](https://gi
 
 The pool and collection remain cached for the current plugin session. **Refresh roulette pool** fetches the collection again and restarts the selection cycle while preserving the valid dub catalog. Refresh is limited to once per minute. Changing filters also restarts the cycle. Settings persist across plugin restarts; the no-repeat cycle is session-only. Picks are uniformly random among remaining eligible titles, with no taste or search metadata requests.
 
+## 0.1.13 — SeaRoulette icon
+
+Added an original purple dice SVG shared by the extension marketplace manifest, plugin tray icon, and compact panel header. The vector remains sharp at small and large sizes.
+
 ## 0.1.12 — Compact tray and corrected header
 
 Replaced the header's full-width flex text nodes with a two-column grid and a single unbroken title. Reduced tray width, card padding, gaps, headings, and button heights. Genres start collapsed to keep the initial panel short; click Genres for its three-column selection grid. ANY/ALL uses short labels without check marks that could wrap. All filter settings and generation behavior remain unchanged.

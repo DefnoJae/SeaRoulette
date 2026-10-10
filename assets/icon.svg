@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="SeaRoulette purple dice">
+<defs><linearGradient id="top" x2="1" y2="1"><stop stop-color="#b997ff"/><stop offset="1" stop-color="#713df3"/></linearGradient><linearGradient id="left" x2="1" y2="1"><stop stop-color="#8d5aff"/><stop offset="1" stop-color="#5428ca"/></linearGradient><linearGradient id="right" x2="1" y2="1"><stop stop-color="#6332db"/><stop offset="1" stop-color="#30146e"/></linearGradient></defs>
+<path d="M256 38 448 143 448 359 256 474 64 359 64 143Z" fill="#422092" stroke="#c4a4ff" stroke-width="8" stroke-linejoin="round"/>
+<path d="M256 38 448 143 256 254 64 143Z" fill="url(#top)"/>
+<path d="M64 143 256 254 256 474 64 359Z" fill="url(#left)"/>
+<path d="M256 254 448 143 448 359 256 474Z" fill="url(#right)"/>
+<path d="M64 143 256 254 448 143M256 254V474" fill="none" stroke="#ad82ff" stroke-width="5" stroke-linejoin="round"/>
+<g fill="#fff4ff"><ellipse cx="256" cy="98" rx="18" ry="10"/><ellipse cx="256" cy="147" rx="18" ry="10"/><ellipse cx="256" cy="197" rx="18" ry="10"/>
+<ellipse cx="111" cy="221" rx="13" ry="20" transform="rotate(-22 111 221)"/><ellipse cx="160" cy="307" rx="13" ry="20" transform="rotate(-22 160 307)"/><ellipse cx="207" cy="394" rx="13" ry="20" transform="rotate(-22 207 394)"/>
+<ellipse cx="302" cy="283" rx="13" ry="20" transform="rotate(22 302 283)"/><ellipse cx="402" cy="226" rx="13" ry="20" transform="rotate(22 402 226)"/><ellipse cx="302" cy="393" rx="13" ry="20" transform="rotate(22 302 393)"/><ellipse cx="402" cy="336" rx="13" ry="20" transform="rotate(22 402 336)"/></g></svg>
