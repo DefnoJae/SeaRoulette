@@ -277,10 +277,10 @@ test('removed outside-only settings migrate to Planning and mixed selections ret
  assert.equal(app.requests.length,0);
  }
 });
-test('Generate icon turns once per accepted click while cooldown clicks are ignored',async()=>{
+test('Generate icon advances one chamber per accepted click while cooldown clicks are ignored',async()=>{
  const app=boot();assert.equal(generateButton(app).props.label,'Generate');
- await app.handlers.generate();assert.equal(generateButton(app).props.style['--searoulette-angle'],'360deg');
- await app.handlers.generate();assert.equal(generateButton(app).props.style['--searoulette-angle'],'360deg');
- app.advance(5000);await app.handlers.generate();assert.equal(generateButton(app).props.style['--searoulette-angle'],'720deg');
+ await app.handlers.generate();assert.equal(generateButton(app).props.style['--searoulette-angle'],'60deg');
+ await app.handlers.generate();assert.equal(generateButton(app).props.style['--searoulette-angle'],'60deg');
+ app.advance(5000);await app.handlers.generate();assert.equal(generateButton(app).props.style['--searoulette-angle'],'120deg');
  assert.equal(app.navigation.length,2);
 });

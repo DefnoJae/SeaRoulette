@@ -269,7 +269,7 @@ function init() {
             const heading = (text: string) => tray.text({ text, style: { fontSize: "13px", fontWeight: "650", color: "#f4f2ff", width: "auto" } });
             const grid = (items: any[], columns = 3) => tray.div({ items, style: { display: "grid", gridTemplateColumns: "repeat(" + columns + ", minmax(0, 1fr))", gap: "6px" } });
             const items: any[] = [
-                tray.css({css:`.searoulette-generate::before { content:""; display:inline-block; width:22px; height:22px; flex-shrink:0; background:url("https://raw.githubusercontent.com/DefnoJae/SeaRoulette/main/assets/searoulette-strawhat.png") center / contain no-repeat; transform:rotate(var(--searoulette-angle, 0deg)); transition:transform 500ms ease-out; } @media (prefers-reduced-motion: reduce) { .searoulette-generate::before { transition:none; } }`}),
+                tray.css({css:`.searoulette-generate::before { content:""; display:inline-block; width:26px; height:26px; flex-shrink:0; background:url("https://raw.githubusercontent.com/DefnoJae/SeaRoulette/main/assets/searoulette-strawhat.png") center / contain no-repeat; transform:rotate(var(--searoulette-angle, 0deg)); transition:transform 1200ms ease-in-out; filter:drop-shadow(1px 0 0 white) drop-shadow(-1px 0 0 white) drop-shadow(0 1px 0 white) drop-shadow(0 -1px 0 white); } @media (prefers-reduced-motion: reduce) { .searoulette-generate::before { transition:none; } }`}),
                 tray.div({style:{display:"grid",gridTemplateColumns:"28px minmax(0, 1fr)",gap:"8px",alignItems:"center"},items:[
                     tray.div({items:[],style:{width:"28px",height:"28px",backgroundImage:"url(https://raw.githubusercontent.com/DefnoJae/SeaRoulette/main/assets/searoulette-strawhat.png)",backgroundSize:"contain",backgroundRepeat:"no-repeat",backgroundPosition:"center"}}),
                     tray.stack({gap:0,style:{minWidth:"0"},items:[
@@ -278,7 +278,7 @@ function init() {
                     ]}),
                 ]}),
                 tray.button({ label: generating ? "Finding an anime…" : seconds ? "Generate in " + seconds + "s" : "Generate", onClick: "generate", className: "searoulette-generate", intent: "primary", size: "lg", disabled: generating || seconds > 0, loading: false, style: {
-                        "--searoulette-angle": String(iconTurns * 360) + "deg", gap: "8px",
+                        "--searoulette-angle": String(iconTurns * 60) + "deg", gap: "8px",
                         width: "100%", height: "40px", minHeight: "40px", borderRadius: "12px", fontSize: "17px", fontWeight: "650",
                         background: "linear-gradient(115deg, #8056fa, #4923d5)", border: "1px solid #9470ff", color: "#ffffff", opacity: generating || seconds > 0 ? "0.5" : "1",
                     } }),
@@ -310,7 +310,7 @@ function init() {
                     tray.button({ label: "☷  Advanced (Optional) " + (advancedOpen ? "⌃" : "⌄"), onClick: "toggle-advanced", intent: "gray", size: "sm", style: { background: "transparent", border: "0", padding: "0", justifyContent: "space-between", fontSize: "12px" } }),
                     ...(advancedOpen ? [
                         tray.button({ label: "Refresh roulette pool", onClick: "refresh-pool", size: "sm", intent: "gray", disabled: generating }),
-                        tray.text({ text: "SeaRoulette 0.1.18", style: muted }),
+                        tray.text({ text: "SeaRoulette 0.1.19", style: muted }),
                     ] : []),
                 ]),
             ];
