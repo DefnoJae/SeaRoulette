@@ -284,3 +284,19 @@ test('Generate icon advances one chamber per accepted click while cooldown click
  app.advance(5000);await app.handlers.generate();assert.equal(generateButton(app).props.style['--searoulette-angle'],'120deg');
  assert.equal(app.navigation.length,2);
 });
+test('year range is inclusive, prefers start year, falls back to season year and combines with genres',async()=>{
+ const app=boot({settings:{minYear:2010,maxYear:2020,genres:['Comedy']},entries:[{...media(1),startDate:{year:2009}},{...media(2),startDate:{year:2010},seasonYear:2025},{...media(3),seasonYear:2020},{...media(4),startDate:{year:2021}},media(5),{...media(6,['Action']),startDate:{year:2015}}]});
+ for(let i=0;i<3;i++){await app.handlers.generate();app.advance(5000);}
+ assert.deepEqual(app.navigation.map(n=>n.params.id),['2','3','2']);
+});
+test('year inputs persist, accept open bounds, reject invalid/reversed ranges and expand safely',async()=>{
+ const app=boot({entries:[{...media(1),startDate:{year:2012}},media(2)]});
+ await app.handlers['toggle-year']();assert.ok(nodes(app.tree).some(n=>n.props.onChange==='min-year'));
+ await app.handlers['min-year']({value:'2010'});await app.handlers['max-year']({value:'2000'});
+ await app.handlers.generate();assert.equal(app.navigation.length,0);
+ await app.handlers['max-year']({value:'garbage'});assert.equal(app.storage.settings.maxYear,2000);
+ await app.handlers['max-year']({value:''});await app.handlers.generate();assert.equal(app.navigation[0].params.id,'1');
+ const restored=boot({settings:app.storage.settings});await restored.handlers['toggle-year']();
+ assert.equal(nodes(restored.tree).find(n=>n.props.onChange==='min-year').props.value,'2010');
+ app.advance(5000);await app.handlers['min-year']({value:''});await app.handlers.generate();app.advance(5000);await app.handlers.generate();assert.equal(app.navigation[2].params.id,'2');
+});

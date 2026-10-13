@@ -12,6 +12,8 @@ function init() {
             maxRating: number;
             genres: string[];
             genreMode: "ANY" | "ALL";
+            minYear: number | null;
+            maxYear: number | null;
         };
         let settings: Settings = loadSettings();
         let cooldownUntil = 0;
@@ -63,12 +65,19 @@ function init() {
                 maxRating: ratingValue(saved?.maxRating, 100),
                 genres: Array.isArray(saved?.genres) ? saved.genres.filter((g: any) => GENRES.indexOf(g) >= 0) : [],
                 genreMode: saved?.genreMode === "ALL" ? "ALL" : "ANY",
+                minYear: yearValue(saved?.minYear, null),
+                maxYear: yearValue(saved?.maxYear, null),
             };
         }
         function save() { $storage.set("settings", settings); }
         function ratingValue(value: any, fallback: number): number {
             const n = Number(value ?? fallback);
             return Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : fallback;
+        }
+        function yearValue(value: any, fallback: number | null): number | null {
+            if (value == null || String(value).trim() === "") return null;
+            const n = Number(value);
+            return Number.isInteger(n) && n >= 1900 && n <= 9999 ? n : fallback;
         }
         function titleOf(m: any) { return String(m?.title?.userPreferred || m?.title?.english || m?.title?.romaji || "Untitled"); }
         function reportError(action: string, error: any) {
@@ -116,6 +125,10 @@ function init() {
             return out;
         }
         function passesBasic(m: any): boolean {
+            if (settings.minYear !== null || settings.maxYear !== null) {
+                const year = Number(m?.startDate?.year || m?.seasonYear || 0);
+                if (!year || (settings.minYear !== null && year < settings.minYear) || (settings.maxYear !== null && year > settings.maxYear)) return false;
+            }
             const rating = Number(m?.meanScore || 0);
             if (settings.minRating > 0 && rating < settings.minRating)
                 return false;
@@ -134,7 +147,7 @@ function init() {
             return malId > 0 && (dubCatalog.dubbed.indexOf(malId) >= 0 || dubCatalog.incomplete.indexOf(malId) >= 0);
         }
         function buildPool(): any[] {
-            const key = JSON.stringify([settings.lists, settings.dubOnly, settings.minRating, settings.maxRating, settings.genres, settings.genreMode]);
+            const key = JSON.stringify([settings.lists, settings.dubOnly, settings.minRating, settings.maxRating, settings.genres, settings.genreMode, settings.minYear, settings.maxYear]);
             if (key === cacheKey)
                 return cachedPool;
             let pool = flattenCollection();
@@ -166,6 +179,10 @@ function init() {
             }
             if (settings.minRating > settings.maxRating) {
                 ctx.toast.warning("SeaRoulette: minimum rating must not exceed maximum rating.");
+                return;
+            }
+            if (settings.minYear !== null && settings.maxYear !== null && settings.minYear > settings.maxYear) {
+                ctx.toast.warning("SeaRoulette: from year must not exceed to year.");
                 return;
             }
             generating = true;
@@ -247,6 +264,10 @@ function init() {
         ctx.registerEventHandler("genre-mode-all", () => { settings.genreMode = "ALL"; invalidate(); });
         ctx.registerEventHandler("dub-only", (e: any) => { settings.dubOnly = !!(e?.value ?? e); invalidate(); });
         let ratingOpen = false;
+        let yearOpen = false;
+        ctx.registerEventHandler("toggle-year", () => {yearOpen = !yearOpen; tray.update();});
+        ctx.registerEventHandler("min-year", (e: any) => {settings.minYear = yearValue(e?.value, settings.minYear); invalidate();});
+        ctx.registerEventHandler("max-year", (e: any) => {settings.maxYear = yearValue(e?.value, settings.maxYear); invalidate();});
         let genresOpen = false;
         let advancedOpen = false;
         ctx.registerEventHandler("toggle-rating", () => { ratingOpen = !ratingOpen; tray.update(); });
@@ -268,7 +289,9 @@ function init() {
             const seconds = Math.max(0, Math.ceil((cooldownUntil - Date.now()) / 1000));
             const heading = (text: string) => tray.text({ text, style: { fontSize: "13px", fontWeight: "650", color: "#f4f2ff", width: "auto" } });
             const grid = (items: any[], columns = 3) => tray.div({ items, style: { display: "grid", gridTemplateColumns: "repeat(" + columns + ", minmax(0, 1fr))", gap: "6px" } });
+            const sectionButton = (label: string, onClick: string, open: boolean) => tray.button({label,onClick,className:"searoulette-section" + (open ? " searoulette-open" : ""),intent:"gray",size:"sm",style:{background:"transparent",border:"0",padding:"0",height:"24px",minHeight:"24px",fontSize:"12px",fontWeight:"650",justifyContent:"space-between",gap:"10px"}});
             const items: any[] = [
+                tray.css({css:'.searoulette-section::after { content:""; width:6px; height:6px; border-right:1.5px solid #b7aecb; border-bottom:1.5px solid #b7aecb; transform:rotate(45deg); flex-shrink:0; margin-right:3px; transition:transform 150ms; } .searoulette-section.searoulette-open::after { transform:rotate(225deg); }'}),
                 tray.css({css:`.searoulette-generate::before { content:""; display:inline-block; width:26px; height:26px; flex-shrink:0; background:url("https://raw.githubusercontent.com/DefnoJae/SeaRoulette/main/assets/searoulette-strawhat.png") center / contain no-repeat; transform:rotate(var(--searoulette-angle, 0deg)); transition:transform 1200ms ease-in-out; filter:drop-shadow(1px 0 0 white) drop-shadow(-1px 0 0 white) drop-shadow(0 1px 0 white) drop-shadow(0 -1px 0 white); } @media (prefers-reduced-motion: reduce) { .searoulette-generate::before { transition:none; } }`}),
                 tray.div({style:{display:"grid",gridTemplateColumns:"28px minmax(0, 1fr)",gap:"8px",alignItems:"center"},items:[
                     tray.div({items:[],style:{width:"28px",height:"28px",backgroundImage:"url(https://raw.githubusercontent.com/DefnoJae/SeaRoulette/main/assets/searoulette-strawhat.png)",backgroundSize:"contain",backgroundRepeat:"no-repeat",backgroundPosition:"center"}}),
@@ -288,29 +311,37 @@ function init() {
                     tray.flex({ gap: 2, style: { justifyContent: "space-between", alignItems: "center" }, items: [heading("☷  Lists"), tray.text({ text: "Select multiple", style: { ...muted, width: "auto", whiteSpace: "nowrap" } })] }),
                     grid(LISTS.map(x => pill(x[1], settings.lists.indexOf(x[0]) >= 0, "list-" + x[0]))),
                 ]),
+                card([tray.switch({label:"✦  English dub only",value:settings.dubOnly,onChange:"dub-only",size:"sm"})]),
                 grid([
-                    card([heading("✦  Dub"), tray.switch({ label: "English dub only", value: settings.dubOnly, onChange: "dub-only", size: "sm" })]),
                     card([
-                        tray.button({ label: "★  Rating Range " + (ratingOpen ? "⌃" : "⌄"), onClick: "toggle-rating", intent: "gray", size: "sm", style: { background: "transparent", border: "0", padding: "0", justifyContent: "space-between", fontSize: "12px" } }),
+                        sectionButton("★  Rating Range", "toggle-rating", ratingOpen),
                         tray.text({ text: settings.minRating + " – " + settings.maxRating, style: { ...muted, fontSize: "15px" } }),
                         ...(ratingOpen ? [tray.stack({ gap: 2, items: [
                                     tray.input({ label: "Minimum rating", value: String(settings.minRating), placeholder: "0", onChange: "min-rating", size: "sm" }),
                                     tray.input({ label: "Maximum rating", value: String(settings.maxRating), placeholder: "100", onChange: "max-rating", size: "sm" }),
                                 ] })] : []),
                     ]),
+                    card([
+                        sectionButton("◷  Year Range", "toggle-year", yearOpen),
+                        tray.text({text:settings.minYear === null && settings.maxYear === null ? "Any year" : (settings.minYear === null ? "Any" : String(settings.minYear)) + " – " + (settings.maxYear === null ? "Any" : String(settings.maxYear)),style:{...muted,fontSize:"15px"}}),
+                        ...(yearOpen ? [tray.stack({gap:2,items:[
+                            tray.input({label:"From year",value:settings.minYear === null ? "" : String(settings.minYear),placeholder:"Any",onChange:"min-year",size:"sm"}),
+                            tray.input({label:"To year",value:settings.maxYear === null ? "" : String(settings.maxYear),placeholder:"Any",onChange:"max-year",size:"sm"}),
+                        ]})] : []),
+                    ]),
                 ], 2),
                 card([
                     tray.flex({ gap: 2, style: { alignItems: "center", justifyContent: "space-between" }, items: [
-                            tray.button({ label: "◇  Genres " + (genresOpen ? "⌃" : "⌄"), onClick: "toggle-genres", intent: "gray", size: "sm", style: { background: "transparent", border: "0", padding: "0", fontSize: "13px", fontWeight: "650" } }),
+                            sectionButton("◇  Genres", "toggle-genres", genresOpen),
                             tray.flex({gap:1,style:{flexShrink:"0"},items:["ANY","ALL"].map(mode=>tray.button({label:mode,onClick:mode==="ANY"?"genre-mode-any":"genre-mode-all",intent:"gray",size:"xs",style:{height:"25px",minHeight:"25px",width:"44px",padding:"2px 6px",borderRadius:"12px",fontSize:"11px",whiteSpace:"nowrap",background:settings.genreMode===mode?"#5931cc":"#1b1b28",border:"1px solid #403453",color:"#eeeaff"}}))}),
                         ] }),
                     ...(genresOpen ? [grid(GENRES.map(g => pill(g, settings.genres.indexOf(g) >= 0, "genre-" + g)))] : [tray.text({ text: settings.genres.length ? settings.genres.join(" · ") : "All genres", style: { ...muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", wordBreak: "normal" } })]),
                 ]),
                 card([
-                    tray.button({ label: "☷  Advanced (Optional) " + (advancedOpen ? "⌃" : "⌄"), onClick: "toggle-advanced", intent: "gray", size: "sm", style: { background: "transparent", border: "0", padding: "0", justifyContent: "space-between", fontSize: "12px" } }),
+                    sectionButton("☷  Advanced (Optional)", "toggle-advanced", advancedOpen),
                     ...(advancedOpen ? [
                         tray.button({ label: "Refresh roulette pool", onClick: "refresh-pool", size: "sm", intent: "gray", disabled: generating }),
-                        tray.text({ text: "SeaRoulette 0.1.19", style: muted }),
+                        tray.text({ text: "SeaRoulette 0.1.20", style: muted }),
                     ] : []),
                 ]),
             ];

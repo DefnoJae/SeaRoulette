@@ -30,6 +30,10 @@ Dub catalog data is provided by MAL-Dubs under its [AGPL-3.0 license](https://gi
 
 The pool and collection remain cached for the current plugin session. **Refresh roulette pool** fetches the collection again and restarts the selection cycle while preserving the valid dub catalog. Refresh is limited to once per minute. Changing filters also restarts the cycle. Settings persist across plugin restarts; the no-repeat cycle is session-only. Picks are uniformly random among remaining eligible titles, with no taste or search metadata requests.
 
+## 0.1.20 — Year range and clean chevrons
+
+Added a persisted inclusive Year Range beside Rating Range, with Dub in the compact row above. Empty year fields leave that bound unrestricted; both empty means Any year. Uses AniList startDate.year, falling back to seasonYear; unknown years are excluded only when a year bound is set. Valid years are 1900–9999; reversed ranges are rejected. Replaced font arrow glyphs with CSS chevrons on all expandable headings while retaining the compact design.
+
 ## 0.1.19 — One-chamber rotation and visible outline
 
 The Generate icon is slightly larger with a white silhouette outline for contrast. Each accepted click advances the cylinder 60 degrees to its next chamber over 1.2 seconds, retaining its position between clicks. Reduced-motion support and immediate navigation are preserved.
